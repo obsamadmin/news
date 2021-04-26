@@ -67,12 +67,31 @@
             </textarea>
           </div>
           <div class="formInputGroup">
-            <textarea id="newsContent"
+            <editor
+              id="newsContents"
+              :init="{
+                //height: 500,
+                menubar: false,
+                plugins: [
+                  'advlist autolink lists link image charmap print preview anchor',
+                  'searchreplace visualblocks code fullscreen',
+                  'insertdatetime media table paste code help wordcount'
+                ],
+                toolbar:
+                  'undo redo | formatselect | bold italic backcolor | \
+             alignleft aligncenter alignright alignjustify | \
+             bullist numlist outdent indent | removeformat | help'
+              }"
+              v-model="news.content"
+              api-key="no-api-key"
+			  name="newsContents"
+            />
+            <!--textarea id="newsContent"
                       v-model="news.content"
                       :placeholder="newsFormContentPlaceholder"
                       class="newsFormInput"
                       name="newsContent">
-            </textarea>
+            </textarea-->
           </div>
         </div>
       </form>
@@ -140,7 +159,40 @@
 <script>
 import * as newsServices from '../../services/newsServices';
 import autosize from 'autosize';
+import Editor from '@tinymce/tinymce-vue';
+
+/*Vue.directive('tinymce-editor',{ 
+  twoWay: true,
+  bind: function() {
+    const self = this;
+    tinymce.init({
+      selector: '#editor',
+      setup: function(editor) {
+        
+        // init tinymce
+        editor.on('init', function() {
+          tinymce.get('editor').setContent(self.value);
+        });
+          
+        // when typing keyup event
+        editor.on('keyup', function() {
+          	
+          // get new value
+          const new_value = tinymce.get('editor').getContent(self.value);
+            
+          // set model value
+          self.set(new_value);
+        });
+      }
+    });
+  }
+});*/
+
 export default {
+  components: {
+    'editor': Editor
+  },
+  
   props: {
     newsId: {
       type: String,

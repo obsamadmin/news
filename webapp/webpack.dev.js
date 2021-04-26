@@ -7,7 +7,7 @@ const app = 'news';
 
 // add the server path to your server location path
 
-const exoServerPath = "/exo-server";
+const exoServerPath = "G:/eXo/Feature-projects/News-V3/platform-6.2.x-news-SNAPSHOT";
 
 
 let config = merge(webpackCommonConfig, {
