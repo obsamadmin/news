@@ -4,12 +4,13 @@
 <%
   NewsService newsService = CommonsUtils.getService(NewsService.class);
   boolean showPinInput = newsService.canPinNews();
+  String tinyMCEApiKey = System.getProperty("exo.tinyMCE.apiKey","");
 %>
 
 <div id="NewsComposerApp"></div>
 
 <script>
 require(['PORTLET/news/NewsComposer'], function(newsComposer) {
-  newsComposer.init(<%=showPinInput%>);
+  newsComposer.init(<%=showPinInput%>, "<%=tinyMCEApiKey%>");
 });
 </script>

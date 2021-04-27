@@ -25,7 +25,7 @@ if (extensionRegistry) {
 }
 
 let newsActivityComposerApp;
-export function init(showPin, maxToUpload, maxFileSize) {
+export function init(showPin, tinyMCEApiKey, maxToUpload, maxFileSize) {
   // getting locale resources
   exoi18n.loadLanguageAsync(lang, urls).then(i18n => {
     // init Vue app when locale resources are ready
@@ -37,11 +37,12 @@ export function init(showPin, maxToUpload, maxFileSize) {
           spaceId: getURLQueryParam('spaceId'),
           activityId: getURLQueryParam('activityId'),
           showPinInput: showPin,
+          tinyMCEApiKey: tinyMCEApiKey,
           maxToUpload: maxToUpload,
           maxFileSize: maxFileSize
         };
       },
-      template: '<exo-news-activity-composer :news-id="newsId" :space-id="spaceId" :activity-id="activityId" :show-pin-input="showPinInput" :max-to-upload="maxToUpload" :max-file-size="maxFileSize"></exo-news-activity-composer>',
+      template: '<exo-news-activity-composer :news-id="newsId" :space-id="spaceId" :activity-id="activityId" :show-pin-input="showPinInput" :tinyMCEApiKey="tinyMCEApiKey" :max-to-upload="maxToUpload" :max-file-size="maxFileSize"></exo-news-activity-composer>',
       i18n,
       vuetify
     });
