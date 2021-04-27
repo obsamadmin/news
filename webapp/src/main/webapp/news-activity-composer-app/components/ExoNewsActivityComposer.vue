@@ -69,18 +69,23 @@
           <div class="formInputGroup">
             <editor
               id="newsContents"
+              ref="newsContents"
               :init="{
-                //height: 500,
+                height: 500,
                 menubar: false,
+                //toolbar_location: 'bottom',
+                branding: false,
+                //inline:true,
+                statusbar: false,
+                theme: 'silver',
+
+                quickbars_insert_toolbar: 'quicktable image media',
+                quickbars_selection_toolbar: 'bold italic underline | alignleft aligncenter alignright | link blockquote',
+                contextmenu: 'undo redo | inserttable | cell row column deletetable',
                 plugins: [
-                  'advlist autolink lists link image charmap print preview anchor',
-                  'searchreplace visualblocks code fullscreen',
-                  'insertdatetime media table paste code help wordcount'
+                  'autolink emoticons hr image imagetools link lists media paste preview quickbars searchreplace table'
                 ],
-                toolbar:
-                  'undo redo | formatselect | bold italic backcolor | \
-             alignleft aligncenter alignright alignjustify | \
-             bullist numlist outdent indent | removeformat | help'
+                toolbar: 'undo redo | formatselect |fontsizeselect bold italic underline strikethrough superscript subscript forecolor | alignleft aligncenter alignright | bullist numlist |table | link blockquote hr | image media| emoticons | preview | removeformat'
               }"
               v-model="news.body"
               :placeholder="newsFormContentPlaceholder"
