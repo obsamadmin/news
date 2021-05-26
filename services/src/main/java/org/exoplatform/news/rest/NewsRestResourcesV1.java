@@ -1,8 +1,20 @@
 package org.exoplatform.news.rest;
 
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
+import io.swagger.annotations.ApiResponse;
+import io.swagger.annotations.ApiResponses;
+import io.swagger.jaxrs.PATCH;
+
 import java.io.InputStream;
 import java.net.URI;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +38,8 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
 
 import org.apache.commons.lang3.StringUtils;
+import org.picocontainer.Startable;
+
 import org.exoplatform.common.http.HTTPStatus;
 import org.exoplatform.container.ExoContainerContext;
 import org.exoplatform.container.PortalContainer;
@@ -47,23 +61,11 @@ import org.exoplatform.social.core.space.SpaceUtils;
 import org.exoplatform.social.core.space.model.Space;
 import org.exoplatform.social.core.space.spi.SpaceService;
 
-import io.swagger.annotations.Api;
-import io.swagger.annotations.ApiOperation;
-import io.swagger.annotations.ApiParam;
-import io.swagger.annotations.ApiResponse;
-import io.swagger.annotations.ApiResponses;
-import io.swagger.jaxrs.PATCH;
-import org.picocontainer.Startable;
-
 @Path("v1/news")
 @Api(tags = "v1/news", value = "v1/news", description = "Managing news")
 public class NewsRestResourcesV1 implements ResourceContainer, Startable {
 
   private static final Log       LOG                             = ExoLogger.getLogger(NewsRestResourcesV1.class);
-
-  private static final String    REDACTOR_MEMBERSHIP_NAME        = "redactor";
-
-  private static final String    MANAGER_MEMBERSHIP_NAME         = "manager";
 
   private static final String    PUBLISHER_MEMBERSHIP_NAME       = "publisher";
 
@@ -489,27 +491,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
         return Response.status(Response.Status.BAD_REQUEST).build();
       }
 
-      String authenticatedUser = request.getRemoteUser();
-
-      List<Space> spaces = new ArrayList<>();
-
-      boolean superManager = spaceService.isSuperManager(authenticatedUser);
-      for (String spaceName : sharedNews.getSpacesNames()) {
-        Space space = spaceService.getSpaceByPrettyName(spaceName);
-        if (space == null) {
-          return Response.status(Response.Status.BAD_REQUEST).build();
-        } else {
-          if (!superManager && !spaceService.isMember(space, authenticatedUser)) {
-            return Response.status(Response.Status.UNAUTHORIZED).build();
-          } else {
-            spaces.add(space);
-          }
-        }
-      }
-
-      sharedNews.setPoster(authenticatedUser);
-
-      newsService.shareNews(sharedNews, spaces);
+      newsService.shareNews(sharedNews);
 
       return Response.ok().build();
     } catch (Exception e) {

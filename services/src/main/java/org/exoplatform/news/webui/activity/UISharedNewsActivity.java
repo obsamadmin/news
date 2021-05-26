@@ -1,9 +1,7 @@
 package org.exoplatform.news.webui.activity;
 
-import java.util.Map;
-
-import com.drew.lang.StringUtil;
 import org.apache.commons.lang3.StringUtils;
+
 import org.exoplatform.commons.utils.CommonsUtils;
 import org.exoplatform.social.core.identity.model.Identity;
 import org.exoplatform.social.core.manager.IdentityManager;

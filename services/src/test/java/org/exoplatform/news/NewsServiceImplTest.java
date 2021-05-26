@@ -516,7 +516,6 @@ public class NewsServiceImplTest {
     Space space1 = new Space();
     space1.setPrettyName("space1");
     SharedNews sharedNews = new SharedNews();
-    sharedNews.setPoster("john");
     sharedNews.setDescription("Description of shared news");
     sharedNews.setSpacesNames(Arrays.asList("space1"));
     sharedNews.setNewsId("1");
@@ -529,7 +528,7 @@ public class NewsServiceImplTest {
 
     // When
     setCurrentIdentity();
-    newsServiceSpy.shareNews(sharedNews, Arrays.asList(space1));
+    newsServiceSpy.shareNews(sharedNews);
 
     // Then
     ArgumentCaptor<Identity> identityCaptor = ArgumentCaptor.forClass(Identity.class);
@@ -541,7 +540,7 @@ public class NewsServiceImplTest {
     ExoSocialActivity activityCaptorValue = activityCaptor.getValue();
     assertEquals("shared_news", activityCaptorValue.getType());
     assertEquals("Description of shared news", activityCaptorValue.getTitle());
-    assertEquals(1, activityCaptorValue.getTemplateParams().size());
+    assertEquals(2, activityCaptorValue.getTemplateParams().size());
     assertEquals("1", activityCaptorValue.getTemplateParams().get("newsId"));
   }
 

@@ -2,7 +2,15 @@ package org.exoplatform.news;
 
 import java.io.FileInputStream;
 import java.io.InputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -42,6 +50,7 @@ import org.exoplatform.news.notification.plugin.ShareNewsNotificationPlugin;
 import org.exoplatform.news.notification.utils.NotificationConstants;
 import org.exoplatform.news.notification.utils.NotificationUtils;
 import org.exoplatform.news.queryBuilder.NewsQueryBuilder;
+import org.exoplatform.news.webui.activity.UISharedNewsActivity;
 import org.exoplatform.portal.config.UserACL;
 import org.exoplatform.services.cms.BasePath;
 import org.exoplatform.services.cms.impl.Utils;
@@ -73,6 +82,7 @@ import org.exoplatform.social.core.identity.provider.SpaceIdentityProvider;
 import org.exoplatform.social.core.manager.ActivityManager;
 import org.exoplatform.social.core.manager.IdentityManager;
 import org.exoplatform.social.core.service.LinkProvider;
+import org.exoplatform.social.core.space.SpaceUtils;
 import org.exoplatform.social.core.space.model.Space;
 import org.exoplatform.social.core.space.spi.SpaceService;
 import org.exoplatform.upload.UploadResource;
@@ -545,13 +555,12 @@ public class NewsServiceImpl implements NewsService {
   }
 
   /**
-   * Share a news to a list of spaces
+   * Share a news to a given spaces
    * 
    * @param sharedNews Data of the shared news
-   * @param spaces List of spaces to share the news with
    * @throws Exception when error
    */
-  public void shareNews(SharedNews sharedNews, List<Space> spaces) throws Exception {
+  public void shareNews(SharedNews sharedNews) throws Exception {
     SessionProvider sessionProvider = sessionProviderService.getSystemSessionProvider(null);
     Session session = sessionProvider.getSession(
                                                  repositoryService.getCurrentRepository()
@@ -560,38 +569,42 @@ public class NewsServiceImpl implements NewsService {
                                                  repositoryService.getCurrentRepository());
 
     try {
-      Identity poster = identityManager.getOrCreateIdentity(OrganizationIdentityProvider.NAME, sharedNews.getPoster(), false);
-      for (Space space : spaces) {
-        // create activity
-        Identity spaceIdentity = identityManager.getOrCreateIdentity(SpaceIdentityProvider.NAME, space.getPrettyName(), false);
-        ExoSocialActivity activity = new ExoSocialActivityImpl();
-        activity.setTitle(sharedNews.getDescription());
-        activity.setBody("");
-        activity.setType("shared_news");
-        activity.setUserId(poster.getId());
-        Map<String, String> templateParams = new HashMap<>();
-        templateParams.put("newsId", sharedNews.getNewsId());
-        activity.setTemplateParams(templateParams);
-        activityManager.saveActivityNoReturn(spaceIdentity, activity);
-
-        // update news node permissions
-        Node newsNode = session.getNodeByUUID(sharedNews.getNewsId());
-        if (newsNode != null) {
-          if (newsNode.canAddMixin("exo:privilegeable")) {
-            newsNode.addMixin("exo:privilegeable");
-          }
-          ((ExtendedNode) newsNode).setPermission("*:" + space.getGroupId(), PermissionType.ALL);
-          if (activity.getId() != null) {
-            if (newsNode.hasProperty("exo:activities")) {
-              String activities = newsNode.getProperty("exo:activities").getString();
-              activities = activities.concat(";").concat(space.getId()).concat(":").concat(activity.getId());
-              newsNode.setProperty("exo:activities", activities);
+      String authenticatedUser = ConversationState.getCurrent().getIdentity().getUserId();
+      Identity poster = identityManager.getOrCreateIdentity(OrganizationIdentityProvider.NAME, authenticatedUser, false);
+      for (String spaceName : sharedNews.getSpacesNames()) {
+        Space space = spaceService.getSpaceByPrettyName(spaceName);
+        if (SpaceUtils.isSpaceManagerOrSuperManager(authenticatedUser, space.getGroupId()) || (spaceService.isMember(space, authenticatedUser) && SpaceUtils.isRedactor(authenticatedUser, space.getGroupId()))) {
+          // create activity
+          Identity spaceIdentity = identityManager.getOrCreateIdentity(SpaceIdentityProvider.NAME, space.getPrettyName(), false);
+          ExoSocialActivity activity = new ExoSocialActivityImpl();
+          activity.setTitle(sharedNews.getDescription());
+          activity.setBody("");
+          activity.setType("shared_news");
+          activity.setUserId(poster.getId());
+          Map<String, String> templateParams = new HashMap<>();
+          templateParams.put("newsId", sharedNews.getNewsId());
+          activity.setTemplateParams(templateParams);
+          activityManager.saveActivityNoReturn(spaceIdentity, activity);
+  
+          // update news node permissions
+          Node newsNode = session.getNodeByUUID(sharedNews.getNewsId());
+          if (newsNode != null) {
+            if (newsNode.canAddMixin("exo:privilegeable")) {
+              newsNode.addMixin("exo:privilegeable");
             }
+            ((ExtendedNode) newsNode).setPermission("*:" + space.getGroupId(), PermissionType.ALL);
+            if (activity.getId() != null) {
+              if (newsNode.hasProperty("exo:activities")) {
+                String activities = newsNode.getProperty("exo:activities").getString();
+                activities = activities.concat(";").concat(space.getId()).concat(":").concat(activity.getId());
+                newsNode.setProperty("exo:activities", activities);
+              }
+            }
+            newsNode.save();
+            News news = getNewsById(sharedNews.getNewsId());
+            sendNotification(news, NotificationConstants.NOTIFICATION_CONTEXT.SHARE_NEWS);
+            sendNotification(news, NotificationConstants.NOTIFICATION_CONTEXT.SHARE_MY_NEWS);
           }
-          newsNode.save();
-          News news = getNewsById(sharedNews.getNewsId());
-          sendNotification(news, NotificationConstants.NOTIFICATION_CONTEXT.SHARE_NEWS);
-          sendNotification(news, NotificationConstants.NOTIFICATION_CONTEXT.SHARE_MY_NEWS);
         }
       }
     } finally {

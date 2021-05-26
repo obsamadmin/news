@@ -22,7 +22,7 @@ public interface NewsService {
 
   void markAsRead(News news, String userId) throws Exception;
 
-  void shareNews(SharedNews sharedNews, List<Space> spaces) throws Exception;
+  void shareNews(SharedNews sharedNews) throws Exception;
 
   void pinNews(String newsId) throws Exception;
 

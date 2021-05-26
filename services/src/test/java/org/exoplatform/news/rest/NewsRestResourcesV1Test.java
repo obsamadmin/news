@@ -270,9 +270,8 @@ public class NewsRestResourcesV1Test {
     assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
     ArgumentCaptor<SharedNews> sharedNewsCaptor = ArgumentCaptor.forClass(SharedNews.class);
     ArgumentCaptor<List<Space>> spacesCaptor = ArgumentCaptor.forClass((Class) List.class);
-    verify(newsService, times(1)).shareNews(sharedNewsCaptor.capture(), spacesCaptor.capture());
+    verify(newsService, times(1)).shareNews(sharedNewsCaptor.capture());
     SharedNews sharedNewsCaptorValue = sharedNewsCaptor.getValue();
-    assertEquals("john", sharedNewsCaptorValue.getPoster());
     assertEquals("Description of shared news", sharedNewsCaptorValue.getDescription());
     assertEquals("2", sharedNewsCaptorValue.getActivityId());
     assertEquals("1", sharedNewsCaptorValue.getNewsId());

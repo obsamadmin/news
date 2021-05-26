@@ -6,8 +6,6 @@ public class SharedNews {
 
   private String newsId;
 
-  private String poster;
-
   private String description;
 
   private List<String> spacesNames;
@@ -20,14 +18,6 @@ public class SharedNews {
 
   public void setNewsId(String newsId) {
     this.newsId = newsId;
-  }
-
-  public String getPoster() {
-    return poster;
-  }
-
-  public void setPoster(String poster) {
-    this.poster = poster;
   }
 
   public String getDescription() {
