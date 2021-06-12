@@ -45,11 +45,22 @@ export function initExtensions() {
   }
 
   const newsActivityTypeExtensionOptions = {
-    init: (activity) => {
-      const newsId = activity && activity.templateParams && activity.templateParams.newsId;
-      if (newsId) {
-        return Vue.prototype.$newsService.getNewsById(newsId)
-          .then(news => activity.news = news);
+    getExtendedComponent: (activity, isActivityDetail) => {
+      if (activity && isActivityDetail) {
+        return {
+          component: Vue.options.components['exo-news-details-activity'],
+          overrideHeader: true,
+          overrideFooter: false,
+        };
+      }
+    },
+    init: (activity, isActivityDetail) => {
+      if (!isActivityDetail) {
+        const newsId = activity && activity.templateParams && activity.templateParams.newsId;
+        if (newsId) {
+          return Vue.prototype.$newsService.getNewsById(newsId)
+            .then(news => activity.news = news);
+        }
       }
     },
     canEdit: () => false,
