@@ -1,5 +1,7 @@
 package org.exoplatform.news.rest;
 
+import static org.exoplatform.news.NewsUtils.getCurrentUserIdentity;
+
 import java.io.InputStream;
 import java.net.URI;
 import java.util.*;
@@ -141,9 +143,9 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
       }
       News createdNews;
       if (PublicationDefaultStates.PUBLISHED.equals(news.getPublicationState())) {
-        createdNews = newsService.createNews(news);
+        createdNews = newsService.createNews(news, getCurrentUserIdentity());
       } else {
-        createdNews = newsService.createNewsDraft(news);
+        createdNews = newsService.createNewsDraft(news, getCurrentUserIdentity());
       }
 
       return Response.ok(createdNews).build();
@@ -169,14 +171,14 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
       return Response.status(Response.Status.BAD_REQUEST).build();
     }
     try {
-      News news = newsService.getNewsById(scheduledNews.getId(), false);
+      News news = newsService.getNewsById(scheduledNews.getId(), getCurrentUserIdentity(), false);
       if (news == null) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
       if (!Boolean.TRUE.equals(news.isCanEdit())) {
         return Response.status(Response.Status.UNAUTHORIZED).build();
       }
-      news = newsService.scheduleNews(scheduledNews);
+      news = newsService.scheduleNews(scheduledNews, getCurrentUserIdentity());
       return Response.ok(news).build();
     } catch (Exception e) {
       LOG.error("Error when scheduling the news " + scheduledNews.getTitle(), e);
@@ -223,9 +225,9 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
       //Set text to search news with
       if (StringUtils.isNotEmpty(text)) {
         String lang = request.getLocale().getLanguage();
-        news = newsService.searchNews(newsFilter, lang);
+        news = newsService.searchNews(newsFilter, getCurrentUserIdentity(), lang);
       } else {
-        news = newsService.getNews(newsFilter);
+        news = newsService.getNews(newsFilter, getCurrentUserIdentity());
       }
 
       if (news != null && news.size() != 0) {
@@ -237,7 +239,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
       newsEntity.setOffset(offset);
       newsEntity.setLimit(limit);
       if (returnSize) {
-        newsEntity.setSize(newsService.getNewsCount(newsFilter));
+        newsEntity.setSize(newsService.getNewsCount(newsFilter, getCurrentUserIdentity()));
       }
       return Response.ok(newsEntity).build();
     } catch (Exception e) {
@@ -303,7 +305,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
         return Response.status(Response.Status.BAD_REQUEST).build();
       }
       String authenticatedUser = request.getRemoteUser();
-      News news = newsService.getNewsById(id, editMode);
+      News news = newsService.getNewsById(id, getCurrentUserIdentity(), editMode);
       if (news == null) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
@@ -432,7 +434,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
     }
 
     try {
-      News news = newsService.getNewsById(id, false);
+      News news = newsService.getNewsById(id, getCurrentUserIdentity(), false);
       if (news == null) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
@@ -458,13 +460,13 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
         }
         news.setPinned(updatedNews.isPinned());
         if (news.isPinned()) {
-          newsService.pinNews(id);
+          newsService.pinNews(id, getCurrentUserIdentity());
         } else {
-          newsService.unpinNews(id);
+          newsService.unpinNews(id, getCurrentUserIdentity());
         }
       }
 
-      news = newsService.updateNews(news);
+      news = newsService.updateNews(news, getCurrentUserIdentity());
 
       return Response.ok(news).build();
     } catch (Exception e) {
@@ -487,13 +489,13 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
                             @ApiParam(value = "Shared News", required = true) SharedNews sharedNews) {
 
     try {
-      News news = newsService.getNewsById(id, false);
+      News news = newsService.getNewsById(id, getCurrentUserIdentity(), false);
       if (news == null) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
       sharedNews.setNewsId(id);
 
-      if (sharedNews == null || sharedNews.getSpacesNames() == null || sharedNews.getSpacesNames().isEmpty()) {
+      if (sharedNews.getSpacesNames() == null || sharedNews.getSpacesNames().isEmpty()) {
         return Response.status(Response.Status.BAD_REQUEST).build();
       }
 
@@ -517,7 +519,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
 
       sharedNews.setPoster(authenticatedUser);
 
-      newsService.shareNews(sharedNews, spaces);
+      newsService.shareNews(sharedNews, spaces, getCurrentUserIdentity());
 
       return Response.ok().build();
     } catch (Exception e) {
@@ -536,7 +538,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
   public Response getNewsIllustration(@Context Request request,
                                       @ApiParam(value = "News id", required = true) @PathParam("id") String id) {
     try {
-      News news = newsService.getNewsById(id, false);
+      News news = newsService.getNewsById(id, getCurrentUserIdentity(), false);
       if (news == null || news.getIllustration() == null || news.getIllustration().length == 0) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
@@ -578,7 +580,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
 
     News news;
     try {
-      news = newsService.getNewsById(id, false);
+      news = newsService.getNewsById(id, getCurrentUserIdentity(), false);
       if (news == null) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
@@ -616,7 +618,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
     }
 
     try {
-      News news = newsService.getNewsById(id, false);
+      News news = newsService.getNewsById(id, getCurrentUserIdentity(), false);
       if (news == null) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
@@ -636,9 +638,9 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
 
         news.setPinned(updatedNews.isPinned());
         if (news.isPinned()) {
-          newsService.pinNews(id);
+          newsService.pinNews(id, getCurrentUserIdentity());
         } else {
-          newsService.unpinNews(id);
+          newsService.unpinNews(id, getCurrentUserIdentity());
         }
       }
 
@@ -650,9 +652,9 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
         }
         news.setArchived(updatedNews.isArchived());
         if (news.isArchived()) {
-          newsService.archiveNews(id);
+          newsService.archiveNews(id, getCurrentUserIdentity());
         } else {
-          newsService.unarchiveNews(id);
+          newsService.unarchiveNews(id, getCurrentUserIdentity());
         }
       }
 
@@ -677,7 +679,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
         if (isUpdatedIllustration) {
           news.setUploadId(updatedNews.getUploadId());
         }
-        newsService.updateNews(news);
+        newsService.updateNews(news, getCurrentUserIdentity());
       }
 
       return Response.ok().build();
@@ -700,7 +702,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
                            @ApiParam(value = "News id", required = true) @PathParam("id") String id) {
 
     try {
-      News news = newsService.getNewsById(id, false);
+      News news = newsService.getNewsById(id, getCurrentUserIdentity(), false);
       if (news == null) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
@@ -742,7 +744,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
         return Response.status(Response.Status.BAD_REQUEST).build();
       }
 
-      News news = newsService.getNewsById(id, false);
+      News news = newsService.getNewsById(id, getCurrentUserIdentity(), false);
       if (news == null) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
@@ -760,7 +762,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
             RequestLifeCycle.begin(container);
             try {
               newsToDeleteQueue.remove(id);
-              newsService.deleteNews(id, isDraft);
+              newsService.deleteNews(id, getCurrentUserIdentity(), isDraft);
             } catch (IllegalAccessException e) {
               LOG.error("User '{}' attempts to delete a non authorized news", authenticatedUser, e);
             } catch (Exception e) {
@@ -772,7 +774,7 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
         }, delay, TimeUnit.SECONDS);
       } else {
         newsToDeleteQueue.remove(id);
-        newsService.deleteNews(id, isDraft);
+        newsService.deleteNews(id, getCurrentUserIdentity(), isDraft);
       }
       return Response.ok().build();
     } catch (Exception e) {

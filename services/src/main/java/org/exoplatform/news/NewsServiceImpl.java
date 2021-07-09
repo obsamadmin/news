@@ -19,12 +19,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import javax.jcr.ItemNotFoundException;
-import javax.jcr.Node;
-import javax.jcr.NodeIterator;
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
-import javax.jcr.Value;
+import javax.jcr.*;
 import javax.jcr.query.Query;
 import javax.jcr.query.QueryManager;
 
@@ -214,7 +209,8 @@ public class NewsServiceImpl implements NewsService {
    * @param news The news to create
    * @throws Exception when error
    */
-  public News createNews(News news) throws Exception {
+  @Override
+  public News createNews(News news, org.exoplatform.services.security.Identity viewer) throws Exception {
     SessionProvider sessionProvider = SessionProvider.createSystemProvider();
     Session session = sessionProvider.getSession(
                                                  repositoryService.getCurrentRepository()
@@ -224,11 +220,11 @@ public class NewsServiceImpl implements NewsService {
 
     try {
       if (StringUtils.isEmpty(news.getId())) {
-        news = createNewsDraft(news);
+        news = createNewsDraft(news, viewer);
       } else {
         postNewsActivity(news);
-        updateNews(news);
-        sendNotification(news, NotificationConstants.NOTIFICATION_CONTEXT.POST_NEWS);
+        updateNews(news, viewer);
+        sendNotification(news, NotificationConstants.NOTIFICATION_CONTEXT.POST_NEWS, viewer);
       }
 
     } finally {
@@ -238,9 +234,9 @@ public class NewsServiceImpl implements NewsService {
     }
 
     if (news.isPinned()) {
-      pinNews(news.getId());
+      pinNews(news.getId(), viewer);
     }
-    NewsUtils.broadcastEvent(NewsUtils.POST_NEWS, news.getId(), news.getAuthor());
+    NewsUtils.broadcastEvent(NewsUtils.POST_NEWS, news.getId(), viewer);
     return news;
   }
 
@@ -252,25 +248,23 @@ public class NewsServiceImpl implements NewsService {
    * @return The news with the given id
    * @throws Exception when error
    */
-  public News getNewsById(String id, boolean editMode) throws Exception {
-    SessionProvider sessionProvider = SessionProvider.createSystemProvider();
+  @Override
+  public News getNewsById(String id, org.exoplatform.services.security.Identity viewer, boolean editMode) throws Exception {
+    SessionProvider sessionProvider = sessionProviderService.getSessionProvider(null);
+    return buildNews(id, sessionProvider, viewer, editMode);
+  }
 
-    Session session = sessionProvider.getSession(
-                                                 repositoryService.getCurrentRepository()
-                                                                  .getConfiguration()
-                                                                  .getDefaultWorkspaceName(),
-                                                 repositoryService.getCurrentRepository());
-
-    try {
-      Node node = session.getNodeByUUID(id);
-      return convertNodeToNews(node, editMode);
-    } catch (ItemNotFoundException e) {
-      return null;
-    } finally {
-      if (session != null) {
-        session.logout();
-      }
-    }
+  /**
+   * Get a news by id
+   * 
+   * @param id Id of the news
+   * @return The news with the given id
+   * @throws Exception when error
+   */
+  @Override
+  public News getNewsById(String id) throws Exception {
+    SessionProvider sessionProvider = sessionProviderService.getSystemSessionProvider(null);
+    return buildNews(id, sessionProvider, null, false);
   }
 
   /**
@@ -280,7 +274,7 @@ public class NewsServiceImpl implements NewsService {
    * @throws Exception when error
    */
   @Override
-  public List<News> getNews(NewsFilter filter) throws Exception {
+  public List<News> getNews(NewsFilter filter, org.exoplatform.services.security.Identity viewer) throws Exception {
     SessionProvider sessionProvider = SessionProvider.createSystemProvider();
 
     Session session = sessionProvider.getSession(
@@ -300,7 +294,7 @@ public class NewsServiceImpl implements NewsService {
       NodeIterator it = query.execute().getNodes();
       while (it.hasNext()) {
         Node iterNode = it.nextNode();
-        News news = convertNodeToNews(iterNode, filter.isDraftNews());
+        News news = convertNodeToNews(iterNode, viewer, filter.isDraftNews());
         listNews.add(news);
       }
       return listNews;
@@ -312,13 +306,13 @@ public class NewsServiceImpl implements NewsService {
   }
 
   @Override
-  public boolean canArchiveNews(String newsAuthor) {
-    org.exoplatform.services.security.Identity currentIdentity = getCurrentIdentity();
-    return currentIdentity != null && (currentIdentity.isMemberOf(PLATFORM_WEB_CONTRIBUTORS_GROUP, PUBLISHER_MEMBERSHIP_NAME)
-        || currentIdentity.getUserId().equals(newsAuthor));
+  public boolean canArchiveNews(String newsAuthor, org.exoplatform.services.security.Identity viewer) {
+    return viewer != null && (viewer.isMemberOf(PLATFORM_WEB_CONTRIBUTORS_GROUP, PUBLISHER_MEMBERSHIP_NAME)
+        || viewer.getUserId().equals(newsAuthor));
   }
 
-  public int getNewsCount(NewsFilter filter) throws Exception {
+  @Override
+  public int getNewsCount(NewsFilter filter, org.exoplatform.services.security.Identity viewer) throws Exception {
     SessionProvider sessionProvider = sessionProviderService.getSessionProvider(null);
     Session session = sessionProvider.getSession(
                                                  (repositoryService.getCurrentRepository()
@@ -353,7 +347,8 @@ public class NewsServiceImpl implements NewsService {
    * @param news The new news
    * @throws Exception when error
    */
-  public News updateNews(News news) throws Exception {
+  @Override
+  public News updateNews(News news, org.exoplatform.services.security.Identity viewer) throws Exception {
     SessionProvider sessionProvider = SessionProvider.createSystemProvider();
     Session session = sessionProvider.getSession(
                                                  repositoryService.getCurrentRepository()
@@ -409,12 +404,12 @@ public class NewsServiceImpl implements NewsService {
                 newMentionedNews.setBody(newMentionedNews.getBody().replaceAll("@"+username, ""));
               });
             }
-            sendNotification(newMentionedNews, NotificationConstants.NOTIFICATION_CONTEXT.MENTION_IN_NEWS);
+            sendNotification(newMentionedNews, NotificationConstants.NOTIFICATION_CONTEXT.MENTION_IN_NEWS, viewer);
           }
           indexingService.reindex(NewsIndexingServiceConnector.TYPE, String.valueOf(news.getId()));
         } else if (PublicationDefaultStates.DRAFT.equals(news.getPublicationState())) {
           publicationService.changeState(newsNode, PublicationDefaultStates.DRAFT, new HashMap<>());
-          Identity currentIdentity = identityManager.getOrCreateIdentity(OrganizationIdentityProvider.NAME, getCurrentUserId());
+          Identity currentIdentity = identityManager.getOrCreateIdentity(OrganizationIdentityProvider.NAME, viewer.getUserId());
           String currentIdentityId = currentIdentity.getId();
           if (!newsNode.isNodeType(MIX_NEWS_MODIFIERS)) {
             newsNode.addMixin(MIX_NEWS_MODIFIERS);
@@ -503,14 +498,15 @@ public class NewsServiceImpl implements NewsService {
    * @param newsId The id of the news to be pinned
    * @throws Exception when error
    */
-  public void pinNews(String newsId) throws Exception {
+  @Override
+  public void pinNews(String newsId, org.exoplatform.services.security.Identity viewer) throws Exception {
     SessionProvider sessionProvider = sessionProviderService.getSystemSessionProvider(null);
     Session session = sessionProvider.getSession(
                                                  repositoryService.getCurrentRepository()
                                                                   .getConfiguration()
                                                                   .getDefaultWorkspaceName(),
                                                  repositoryService.getCurrentRepository());
-    News news = getNewsById(newsId, false);
+    News news = getNewsById(newsId, viewer, false);
 
     Node newsNode = session.getNodeByUUID(newsId);
 
@@ -530,18 +526,18 @@ public class NewsServiceImpl implements NewsService {
 
     newsNode.setProperty("exo:pinned", true);
     newsNode.save();
-    NewsUtils.broadcastEvent(NewsUtils.PUBLISH_NEWS, news.getId(), getCurrentUserId());
-    sendNotification(news, NotificationConstants.NOTIFICATION_CONTEXT.PUBLISH_IN_NEWS);
+    NewsUtils.broadcastEvent(NewsUtils.PUBLISH_NEWS, news.getId(), viewer);
+    sendNotification(news, NotificationConstants.NOTIFICATION_CONTEXT.PUBLISH_IN_NEWS, viewer);
   }
 
-  public void unpinNews(String newsId) throws Exception {
+  public void unpinNews(String newsId, org.exoplatform.services.security.Identity viewer) throws Exception {
     SessionProvider sessionProvider = sessionProviderService.getSystemSessionProvider(null);
     Session session = sessionProvider.getSession(
                                                  repositoryService.getCurrentRepository()
                                                                   .getConfiguration()
                                                                   .getDefaultWorkspaceName(),
                                                  repositoryService.getCurrentRepository());
-    News news = getNewsById(newsId, false);
+    News news = getNewsById(newsId, viewer, false);
     if (news == null) {
       throw new Exception("Unable to find a news with an id equal to: " + newsId);
     }
@@ -617,7 +613,8 @@ public class NewsServiceImpl implements NewsService {
    * @param spaces List of spaces to share the news with
    * @throws Exception when error
    */
-  public void shareNews(SharedNews sharedNews, List<Space> spaces) throws Exception {
+  @Override
+  public void shareNews(SharedNews sharedNews, List<Space> spaces, org.exoplatform.services.security.Identity viewer) throws Exception {
     SessionProvider sessionProvider = SessionProvider.createSystemProvider();
     Session session = sessionProvider.getSession(
                                                  repositoryService.getCurrentRepository()
@@ -637,7 +634,7 @@ public class NewsServiceImpl implements NewsService {
         activity.setUserId(poster.getId());
         Map<String, String> templateParams = new HashMap<>();
         templateParams.put("newsId", sharedNews.getNewsId());
-        News news = getNewsById(sharedNews.getNewsId(), false);
+        News news = getNewsById(sharedNews.getNewsId(), viewer, false);
         templateParams.put("originalActivityId", news.getActivityId());
         activity.setTemplateParams(templateParams);
         activityManager.saveActivityNoReturn(spaceIdentity, activity);
@@ -673,7 +670,8 @@ public class NewsServiceImpl implements NewsService {
    * @param isDraft
    * @throws Exception when error
    */
-  public void deleteNews(String newsId, boolean isDraft) throws Exception {
+  @Override
+  public void deleteNews(String newsId, org.exoplatform.services.security.Identity viewer, boolean isDraft) throws Exception {
     SessionProvider sessionProvider = sessionProviderService.getSystemSessionProvider(null);
 
     Session session = sessionProvider.getSession(
@@ -717,7 +715,7 @@ public class NewsServiceImpl implements NewsService {
   }
 
   @Override
-  public News convertNodeToNews(Node node, boolean editMode) throws Exception {
+  public News convertNodeToNews(Node node, org.exoplatform.services.security.Identity viewer, boolean editMode) throws Exception {
     if (node == null) {
       return null;
     }
@@ -750,7 +748,6 @@ public class NewsServiceImpl implements NewsService {
     sanitizedBody = sanitizedBody.replaceAll(HTML_AT_SYMBOL_ESCAPED_PATTERN, HTML_AT_SYMBOL_PATTERN);
     news.setBody(substituteUsernames(portalOwner, sanitizedBody));
     news.setAuthor(getStringProperty(node, "exo:author"));
-    news.setCanArchive(canArchiveNews(news.getAuthor()));
     news.setCreationDate(getDateProperty(node, "exo:dateCreated"));
     news.setPublicationDate(getPublicationDate(node));
     news.setUpdater(getLastUpdater(node));
@@ -758,52 +755,7 @@ public class NewsServiceImpl implements NewsService {
     news.setDraftUpdater(getStringProperty(node, "exo:lastModifier"));
     news.setDraftUpdateDate(getDateProperty(node, "exo:dateModified"));
     news.setPath(getPath(node));
-    if (node.hasProperty(StageAndVersionPublicationConstant.CURRENT_STATE)) {
-      news.setPublicationState(node.getProperty(StageAndVersionPublicationConstant.CURRENT_STATE).getString());
-    }
-    if (originalNode.hasProperty("exo:pinned")) {
-      news.setPinned(originalNode.getProperty("exo:pinned").getBoolean());
-    }
-    if (originalNode.hasProperty("exo:archived")) {
-      news.setArchived(originalNode.getProperty("exo:archived").getBoolean());
-    }
-    if (originalNode.hasProperty("exo:spaceId")) {
-      news.setSpaceId(node.getProperty("exo:spaceId").getString());
-    }
-    news.setCanEdit(canEditNews(news.getAuthor(),news.getSpaceId()));
-    news.setCanDelete(canDeleteNews(news.getAuthor(),news.getSpaceId()));
-    StringBuilder newsUrl = new StringBuilder("");
-    if (originalNode.hasProperty("exo:activities")) {
-      String strActivities = originalNode.getProperty("exo:activities").getString();
-      if(StringUtils.isNotEmpty(strActivities)) {
-        String[] activities = strActivities.split(";");
-        StringBuilder memberSpaceActivities = new StringBuilder();
-        org.exoplatform.services.security.Identity currentIdentity = getCurrentIdentity();
-        String currentUsername = currentIdentity == null ? null : currentIdentity.getUserId();
-        String newsActivityId = activities[0].split(":")[1];
-        news.setActivityId(newsActivityId);
-        Space newsPostedInSpace = spaceService.getSpaceById(activities[0].split(":")[0]);
-        if (currentUsername != null && spaceService.isMember(newsPostedInSpace, currentUsername)) {
-          newsUrl.append("/").append(portalName).append("/").append(portalOwner).append("/activity?id=").append(newsActivityId);
-          news.setUrl(newsUrl.toString());
-        } else {
-          newsUrl.append("/").append(portalName).append("/").append(portalOwner).append("/news/detail?newsId=").append(news.getId());
-          news.setUrl(newsUrl.toString());
-        }
-        memberSpaceActivities.append(activities[0]).append(";");
-        for (int i = 1; i < activities.length; i++) {
-          Space space = spaceService.getSpaceById(activities[i].split(":")[0]);
-          ExoSocialActivity exoSocialActivity = activityManager.getActivity(activities[i].split(":")[1]);
-          if (space != null && currentUsername != null && spaceService.isMember(space, currentUsername) && exoSocialActivity != null) {
-            memberSpaceActivities.append(activities[i]).append(";");
-          }
-        }
-        news.setActivities(memberSpaceActivities.toString());
-      } else {
-        newsUrl.append("/").append(portalName).append("/").append(portalOwner).append("/news/detail?newsId=").append(news.getId());
-        news.setUrl(newsUrl.toString());
-      }
-    }
+
     if (node.hasProperty(AuthoringPublicationConstant.START_TIME_PROPERTY)) {
       news.setSchedulePostDate(node.getProperty(AuthoringPublicationConstant.START_TIME_PROPERTY).getString());
     }
@@ -823,14 +775,66 @@ public class NewsServiceImpl implements NewsService {
 
     news.setAttachments(newsAttachmentsService.getNewsAttachments(node));
 
+    String viewerUsername = viewer == null ? null : viewer.getUserId();
+    if (viewerUsername != null) {
+      news.setCanArchive(canArchiveNews(news.getAuthor(), viewer));
+      if (node.hasProperty(StageAndVersionPublicationConstant.CURRENT_STATE)) {
+        news.setPublicationState(node.getProperty(StageAndVersionPublicationConstant.CURRENT_STATE).getString());
+      }
+      if (originalNode.hasProperty("exo:pinned")) {
+        news.setPinned(originalNode.getProperty("exo:pinned").getBoolean());
+      }
+      if (originalNode.hasProperty("exo:archived")) {
+        news.setArchived(originalNode.getProperty("exo:archived").getBoolean());
+      }
+      if (originalNode.hasProperty("exo:spaceId")) {
+        news.setSpaceId(node.getProperty("exo:spaceId").getString());
+      }
+      news.setCanEdit(canEditNews(news.getAuthor(), news.getSpaceId(), viewer));
+      news.setCanDelete(canDeleteNews(news.getAuthor(), news.getSpaceId(), viewer));
+      news.setCanPublish(canPublishNews(news.getAuthor(), news.getSpaceId(), viewer));
+      StringBuilder newsUrl = new StringBuilder("");
+      if (originalNode.hasProperty("exo:activities")) {
+        String strActivities = originalNode.getProperty("exo:activities").getString();
+        if(StringUtils.isNotEmpty(strActivities)) {
+          String[] activities = strActivities.split(";");
+          StringBuilder memberSpaceActivities = new StringBuilder();
+          String newsActivityId = activities[0].split(":")[1];
+          news.setActivityId(newsActivityId);
+          Space newsPostedInSpace = spaceService.getSpaceById(activities[0].split(":")[0]);
+          if (viewerUsername != null && spaceService.isMember(newsPostedInSpace, viewerUsername)) {
+            newsUrl.append("/").append(portalName).append("/").append(portalOwner).append("/activity?id=").append(newsActivityId);
+            news.setUrl(newsUrl.toString());
+          } else {
+            newsUrl.append("/").append(portalName).append("/").append(portalOwner).append("/news/detail?newsId=").append(news.getId());
+            news.setUrl(newsUrl.toString());
+          }
+          memberSpaceActivities.append(activities[0]).append(";");
+          for (int i = 1; i < activities.length; i++) {
+            Space space = spaceService.getSpaceById(activities[i].split(":")[0]);
+            ExoSocialActivity exoSocialActivity = activityManager.getActivity(activities[i].split(":")[1]);
+            if (space != null && viewerUsername != null && spaceService.isMember(space, viewerUsername) && exoSocialActivity != null) {
+              memberSpaceActivities.append(activities[i]).append(";");
+            }
+          }
+          news.setActivities(memberSpaceActivities.toString());
+        } else {
+          newsUrl.append("/").append(portalName).append("/").append(portalOwner).append("/news/detail?newsId=").append(news.getId());
+          news.setUrl(newsUrl.toString());
+        }
+      }
+    }
+
     Space space = spaceService.getSpaceById(news.getSpaceId());
     if (space != null) {
+      if (viewerUsername != null) {
+        boolean hiddenSpace = space.getVisibility().equals(Space.HIDDEN) && !spaceService.isMember(space, viewerUsername) && !spaceService.isSuperManager(viewerUsername);
+        news.setHiddenSpace(hiddenSpace);
+        boolean isSpaceMember =  spaceService.isSuperManager(viewerUsername) || spaceService.isMember(space, viewerUsername);
+        news.setSpaceMember(isSpaceMember);
+      }
+
       String spaceName = space.getDisplayName();
-      String currentUser = getCurrentUserId();
-      boolean hiddenSpace = space.getVisibility().equals(Space.HIDDEN) && !spaceService.isMember(space, currentUser) && !spaceService.isSuperManager(currentUser);
-      news.setHiddenSpace(hiddenSpace);
-      boolean isSpaceMember =  spaceService.isSuperManager(getCurrentUserId()) || spaceService.isMember(space, getCurrentUserId());
-      news.setSpaceMember(isSpaceMember);
       news.setSpaceDisplayName(spaceName);
       if(StringUtils.isNotEmpty(space.getGroupId())) {
         String spaceGroupId = space.getGroupId().split("/")[2];
@@ -970,7 +974,8 @@ public class NewsServiceImpl implements NewsService {
    * @return News draft id
    * @throws Exception when error
    */
-  public News createNewsDraft(News news) throws Exception {
+  @Override
+  public News createNewsDraft(News news, org.exoplatform.services.security.Identity viewer) throws Exception {
     SessionProvider sessionProvider = sessionProviderService.getSystemSessionProvider(null);
     Session session = sessionProvider.getSession(
                                                  repositoryService.getCurrentRepository()
@@ -1039,6 +1044,7 @@ public class NewsServiceImpl implements NewsService {
    * @param limit
    * @return News Search Result
    */
+  @Override
   public List<NewsESSearchResult> search(Identity currentUser, String term, int offset, int limit) {
     return newsESSearchConnector.search(currentUser,term, offset, limit);
   }
@@ -1117,24 +1123,16 @@ public class NewsServiceImpl implements NewsService {
     return nodePath;
   }
 
-  /**
-   * Return a boolean that indicates if the current user can edit the news or
-   * not
-   * 
-   * @param posterId the poster id of the news
-   * @param spaceId the space id of the news
-   * @return if the news can be edited
-   */
-  public boolean canEditNews(String posterId, String spaceId) {
-    org.exoplatform.services.security.Identity currentIdentity = getCurrentIdentity();
-    if (currentIdentity == null) {
+  @Override
+  public boolean canEditNews(String posterId, String spaceId, org.exoplatform.services.security.Identity viewer) {
+    if (viewer == null) {
       return false;
     }
-    String authenticatedUser = currentIdentity.getUserId();
+    String authenticatedUser = viewer.getUserId();
     Space currentSpace = spaceService.getSpaceById(spaceId);
     return authenticatedUser.equals(posterId) || spaceService.isSuperManager(authenticatedUser)
-        || currentIdentity.isMemberOf(PLATFORM_WEB_CONTRIBUTORS_GROUP, PUBLISHER_MEMBERSHIP_NAME)
-        || currentIdentity.isMemberOf(currentSpace.getGroupId(), MANAGER_MEMBERSHIP_NAME);
+        || viewer.isMemberOf(PLATFORM_WEB_CONTRIBUTORS_GROUP, PUBLISHER_MEMBERSHIP_NAME)
+        || viewer.isMemberOf(currentSpace.getGroupId(), MANAGER_MEMBERSHIP_NAME);
   }
 
   /**
@@ -1142,12 +1140,14 @@ public class NewsServiceImpl implements NewsService {
    * 
    * @return if the news can be pinned
    */
-  public boolean canPinNews() {
-    return  getCurrentIdentity().isMemberOf(PLATFORM_ADMINISTRATORS_GROUP, "*") ||
-            getCurrentIdentity().isMemberOf(PLATFORM_WEB_CONTRIBUTORS_GROUP, PUBLISHER_MEMBERSHIP_NAME);
+  @Override
+  public boolean canPublishNews(org.exoplatform.services.security.Identity viewer) {
+    return  viewer.isMemberOf(PLATFORM_ADMINISTRATORS_GROUP, "*") ||
+        viewer.isMemberOf(PLATFORM_WEB_CONTRIBUTORS_GROUP, PUBLISHER_MEMBERSHIP_NAME);
   }
 
-  public News scheduleNews(News news) throws Exception {
+  @Override
+  public News scheduleNews(News news, org.exoplatform.services.security.Identity viewer) throws Exception {
     SessionProvider sessionProvider = sessionProviderService.getSessionProvider(null);
     Session session = sessionProvider.getSession(
                                                  repositoryService.getCurrentRepository()
@@ -1170,11 +1170,11 @@ public class NewsServiceImpl implements NewsService {
         Calendar startPublishedDate = Calendar.getInstance();
         startPublishedDate.setTime(format.parse(schedulePostDate));
         scheduledNewsNode.setProperty(AuthoringPublicationConstant.START_TIME_PROPERTY, startPublishedDate);
-        scheduledNewsNode.setProperty(LAST_PUBLISHER, getCurrentUserId());
+        scheduledNewsNode.setProperty(LAST_PUBLISHER, viewer.getUserId());
         scheduledNewsNode.save();
         publicationService.changeState(scheduledNewsNode, PublicationDefaultStates.STAGED, new HashMap<>());
       }
-      scheduledNews = convertNodeToNews(scheduledNewsNode, false);
+      scheduledNews = convertNodeToNews(scheduledNewsNode, viewer, false);
     } finally {
       if (session != null) {
         session.logout();
@@ -1209,10 +1209,10 @@ public class NewsServiceImpl implements NewsService {
     }
   }
 
-  protected void sendNotification(News news, NotificationConstants.NOTIFICATION_CONTEXT context) throws Exception {
+  protected void sendNotification(News news, NotificationConstants.NOTIFICATION_CONTEXT context, org.exoplatform.services.security.Identity viewer) throws Exception {
     String newsId = news.getId();
     String contentAuthor = news.getAuthor();
-    String currentUser = getCurrentUserId() != null ? getCurrentUserId() : contentAuthor;
+    String currentUser = viewer != null ? viewer.getUserId() : contentAuthor;
     String activities = news.getActivities();
     String contentTitle = news.getTitle();
     String contentBody = news.getBody();
@@ -1272,16 +1272,6 @@ public class NewsServiceImpl implements NewsService {
     mentionNotificationCtx.getNotificationExecutor().with(mentionNotificationCtx.makeCommand(PluginKey.key(MentionInNewsNotificationPlugin.ID))).execute(mentionNotificationCtx);
   }
 
-  private org.exoplatform.services.security.Identity getCurrentIdentity() {
-    ConversationState conversationState = ConversationState.getCurrent();
-    return conversationState != null ? ConversationState.getCurrent().getIdentity() : null;
-  }
-
-  private String getCurrentUserId() {
-    org.exoplatform.services.security.Identity currentIdentity = getCurrentIdentity();
-    return currentIdentity != null ? currentIdentity.getUserId() : null;
-  }
-
   /**
    * Search news with the given text
    * 
@@ -1289,8 +1279,8 @@ public class NewsServiceImpl implements NewsService {
    * @param lang language
    * @throws Exception when error
    */
-  public List<News> searchNews(NewsFilter filter, String lang) throws Exception {
-
+  @Override
+  public List<News> searchNews(NewsFilter filter, org.exoplatform.services.security.Identity viewer, String lang) throws Exception {
     SearchContext context = new SearchContext(null, null);
     context.lang(lang);
     List<News> newsList = new ArrayList<>();
@@ -1302,7 +1292,7 @@ public class NewsServiceImpl implements NewsService {
     searchResults.forEach(res -> {
       try {
         Node newsNode = ((NewsSearchResult) res).getNode();
-        News news = convertNodeToNews(newsNode, false);
+        News news = convertNodeToNews(newsNode, viewer, false);
         newsList.add(news);
 
       } catch (Exception e) {
@@ -1318,7 +1308,8 @@ public class NewsServiceImpl implements NewsService {
    * @param newsId The id of the news to be archived
    * @throws Exception when error
    */
-  public void archiveNews(String newsId) throws Exception {
+  public void archiveNews(String newsId, org.exoplatform.services.security.Identity viewer) throws Exception {
+    // TODO security check ? better to not use sessionProviderService.getSystemSessionProvider
     SessionProvider sessionProvider = sessionProviderService.getSystemSessionProvider(null);
     Session session = sessionProvider.getSession(
                                                  repositoryService.getCurrentRepository()
@@ -1331,7 +1322,7 @@ public class NewsServiceImpl implements NewsService {
     }
     boolean isPinned = newsNode.getProperty("exo:pinned").getBoolean();
     if (isPinned) {
-      unpinNews(newsId);
+      unpinNews(newsId, viewer);
     }
     newsNode.setProperty("exo:archived", true);
     newsNode.save();
@@ -1343,7 +1334,9 @@ public class NewsServiceImpl implements NewsService {
    * @param newsId The id of the news to be unarchived
    * @throws Exception when error
    */
-  public void unarchiveNews(String newsId) throws Exception {
+  @Override
+  public void unarchiveNews(String newsId, org.exoplatform.services.security.Identity viewer) throws Exception {
+    // TODO security check ? better to not use sessionProviderService.getSystemSessionProvider
     SessionProvider sessionProvider = sessionProviderService.getSystemSessionProvider(null);
     Session session = sessionProvider.getSession(
                                                  repositoryService.getCurrentRepository()
@@ -1359,12 +1352,22 @@ public class NewsServiceImpl implements NewsService {
   }
 
   @Override
-  public boolean canDeleteNews(String posterId, String spaceId) {
-    org.exoplatform.services.security.Identity currentIdentity = getCurrentIdentity();
-    if (currentIdentity == null) {
+  public boolean canDeleteNews(String posterId, String spaceId, org.exoplatform.services.security.Identity viewer) {
+    if (viewer == null) {
       return false;
     }
-    String authenticatedUser = currentIdentity.getUserId();
+    String authenticatedUser = viewer.getUserId();
+    Space currentSpace = spaceService.getSpaceById(spaceId);
+    return authenticatedUser.equals(posterId) || userACL.isSuperUser() || spaceService.isSuperManager(authenticatedUser)
+        || spaceService.isManager(currentSpace, authenticatedUser);
+  }
+
+  @Override
+  public boolean canPublishNews(String posterId, String spaceId, org.exoplatform.services.security.Identity viewer) {
+    if (viewer == null) {
+      return false;
+    }
+    String authenticatedUser = viewer.getUserId();
     Space currentSpace = spaceService.getSpaceById(spaceId);
     return authenticatedUser.equals(posterId) || userACL.isSuperUser() || spaceService.isSuperManager(authenticatedUser)
         || spaceService.isManager(currentSpace, authenticatedUser);
@@ -1405,6 +1408,25 @@ public class NewsServiceImpl implements NewsService {
       return buf.toString();
     }
     return message;
+  }
+
+  private News buildNews(String id,
+                         SessionProvider sessionProvider,
+                         org.exoplatform.services.security.Identity viewer,
+                         boolean editMode) throws Exception {
+    Session session = sessionProvider.getSession(repositoryService.getCurrentRepository()
+                                                                  .getConfiguration()
+                                                                  .getDefaultWorkspaceName(),
+                                                 repositoryService.getCurrentRepository());
+
+    try {
+      Node node = session.getNodeByUUID(id);
+      return convertNodeToNews(node, viewer, editMode);
+    } catch (ItemNotFoundException e) {
+      return null;
+    } finally {
+      session.logout();
+    }
   }
 
 }

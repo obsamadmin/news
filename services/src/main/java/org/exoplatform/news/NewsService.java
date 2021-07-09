@@ -12,45 +12,58 @@ import org.exoplatform.social.core.identity.model.Identity;
 import org.exoplatform.social.core.space.model.Space;
 
 public interface NewsService {
-  News createNews(News news) throws Exception;
 
-  News getNewsById(String id, boolean editMode) throws Exception;
+  News createNews(News news, org.exoplatform.services.security.Identity viewer) throws Exception;
 
-  List<News> getNews(NewsFilter filter) throws Exception;
+  /**
+   * Get a news by id
+   * 
+   * @param id Id of the news
+   * @return The news with the given id
+   * @throws Exception when error
+   */
+  News getNewsById(String id) throws Exception;
 
-  int getNewsCount(NewsFilter filter) throws Exception;
+  News getNewsById(String id, org.exoplatform.services.security.Identity viewer, boolean editMode) throws Exception;
 
-  News updateNews(News news) throws Exception;
+  List<News> getNews(NewsFilter filter, org.exoplatform.services.security.Identity viewer) throws Exception;
+
+  int getNewsCount(NewsFilter filter, org.exoplatform.services.security.Identity viewer) throws Exception;
+
+  News updateNews(News news, org.exoplatform.services.security.Identity viewer) throws Exception;
 
   void markAsRead(News news, String userId) throws Exception;
 
-  void shareNews(SharedNews sharedNews, List<Space> spaces) throws Exception;
+  void shareNews(SharedNews sharedNews, List<Space> spaces, org.exoplatform.services.security.Identity viewer) throws Exception;
 
-  void pinNews(String newsId) throws Exception;
+  void pinNews(String newsId, org.exoplatform.services.security.Identity viewer) throws Exception;
 
-  void unpinNews(String newsId) throws Exception;
+  void unpinNews(String newsId, org.exoplatform.services.security.Identity viewer) throws Exception;
 
-  News convertNodeToNews(Node node, boolean editMode) throws Exception;
+  News convertNodeToNews(Node node, org.exoplatform.services.security.Identity viewer, boolean editMode) throws Exception;
 
-  News createNewsDraft(News news) throws Exception;
+  News createNewsDraft(News news, org.exoplatform.services.security.Identity viewer) throws Exception;
 
-  void deleteNews(String id, boolean isDraft) throws Exception;
+  void deleteNews(String id, org.exoplatform.services.security.Identity viewer, boolean isDraft) throws Exception;
 
-  public boolean canEditNews(String posterId, String spaceId);
+  public boolean canEditNews(String posterId, String spaceId, org.exoplatform.services.security.Identity viewer);
 
-  public boolean canPinNews();
+  public boolean canPublishNews(org.exoplatform.services.security.Identity viewer);
   
-  boolean canArchiveNews(String newsAuthor);
+  boolean canArchiveNews(String newsAuthor, org.exoplatform.services.security.Identity viewer);
 
-  List<News> searchNews(NewsFilter filter, String lang) throws Exception;
+  List<News> searchNews(NewsFilter filter, org.exoplatform.services.security.Identity viewer, String lang) throws Exception;
 
-  void archiveNews(String newsId) throws Exception;
+  void archiveNews(String newsId, org.exoplatform.services.security.Identity viewer) throws Exception;
 
-  void unarchiveNews(String newsId) throws Exception;
+  void unarchiveNews(String newsId, org.exoplatform.services.security.Identity viewer) throws Exception;
 
-  public boolean canDeleteNews(String posterId, String spaceId);
+  public boolean canDeleteNews(String posterId, String spaceId, org.exoplatform.services.security.Identity viewer);
 
   public List<NewsESSearchResult> search(Identity currentUser, String term, int offset, int limit);
 
-  News scheduleNews(News news) throws Exception;
+  News scheduleNews(News news, org.exoplatform.services.security.Identity viewer) throws Exception;
+
+  boolean canPublishNews(String posterId, String spaceId, org.exoplatform.services.security.Identity viewer);
+
 }

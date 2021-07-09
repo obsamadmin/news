@@ -21,10 +21,13 @@ import javax.jcr.Node;
 import org.apache.commons.lang3.StringUtils;
 
 import org.exoplatform.news.NewsService;
+import org.exoplatform.news.NewsUtils;
 import org.exoplatform.news.model.News;
 import org.exoplatform.services.cms.CmsService;
 import org.exoplatform.services.listener.Event;
 import org.exoplatform.services.listener.Listener;
+import org.exoplatform.services.security.Identity;
+import org.exoplatform.services.security.IdentityConstants;
 import org.exoplatform.services.wcm.extensions.publication.lifecycle.authoring.AuthoringPublicationConstant;
 import org.exoplatform.services.wcm.publication.PublicationDefaultStates;
 import org.exoplatform.services.wcm.publication.lifecycle.stageversion.StageAndVersionPublicationConstant;
@@ -41,12 +44,23 @@ public class NewsPublicationListener extends Listener<CmsService, Node> {
   public void onEvent(Event<CmsService, Node> event) throws Exception {
     if (AuthoringPublicationConstant.POST_CHANGE_STATE_EVENT.equals(event.getEventName())) {
       Node targetNode = event.getData();
+
       if (targetNode.isNodeType("exo:news") && targetNode.getProperty(StageAndVersionPublicationConstant.CURRENT_STATE).getString().equals(PublicationDefaultStates.PUBLISHED)) {
-        News news = newsService.convertNodeToNews(targetNode, false);
+        Identity userIdentity = NewsUtils.getCurrentUserIdentity();
+        if (userIdentity == null) {
+          String userID = targetNode.getSession().getUserID();
+          if (StringUtils.isBlank(userID) || StringUtils.equals(userID, IdentityConstants.ANONIM)
+              || StringUtils.equals(userID, IdentityConstants.SYSTEM)) {
+            userID = targetNode.getProperty("exo:author").getString();
+          }
+          userIdentity = NewsUtils.getUserIdentity(userID);
+        }
+        News news = newsService.convertNodeToNews(targetNode, userIdentity, false);
         if (StringUtils.isEmpty(news.getActivities())) {
-          newsService.createNews(news);
+          newsService.createNews(news, userIdentity);
         }
       }
     }
   }
+
 }

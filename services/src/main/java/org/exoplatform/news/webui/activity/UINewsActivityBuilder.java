@@ -2,6 +2,7 @@ package org.exoplatform.news.webui.activity;
 
 import org.exoplatform.commons.utils.CommonsUtils;
 import org.exoplatform.news.NewsService;
+import org.exoplatform.news.NewsUtils;
 import org.exoplatform.news.model.News;
 import org.exoplatform.services.log.ExoLogger;
 import org.exoplatform.services.log.Log;
@@ -20,7 +21,7 @@ public class UINewsActivityBuilder extends BaseUIActivityBuilder {
     try {
       String newsId = activity.getTemplateParams().get("newsId");
       if (newsId != null) {
-        News news = newsService.getNewsById(newsId, false);
+        News news = newsService.getNewsById(newsId, NewsUtils.getCurrentUserIdentity(), false);
         if(news != null) {
           ((UINewsActivity) uiActivity).setNews(news);
         }

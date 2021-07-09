@@ -9,6 +9,8 @@ import org.exoplatform.news.model.News;
 import org.exoplatform.services.listener.Event;
 import org.exoplatform.services.listener.Listener;
 import org.exoplatform.services.listener.ListenerService;
+import org.exoplatform.services.security.Identity;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -46,7 +48,7 @@ public class NewsGamificationIntegrationListenerTest {
         executeListener.set(true);
       }
     });
-    newsService.createNews(news);
+    newsService.createNews(news, new Identity("root"));
     assertTrue(executeListener.get());
   }
 

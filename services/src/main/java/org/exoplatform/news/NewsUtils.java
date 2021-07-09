@@ -2,10 +2,12 @@ package org.exoplatform.news;
 
 import org.exoplatform.commons.utils.CommonsUtils;
 import org.exoplatform.commons.utils.ListAccess;
+import org.exoplatform.container.ExoContainerContext;
 import org.exoplatform.news.notification.plugin.MentionInNewsNotificationPlugin;
 import org.exoplatform.services.listener.ListenerService;
 import org.exoplatform.services.log.ExoLogger;
 import org.exoplatform.services.log.Log;
+import org.exoplatform.services.security.*;
 import org.exoplatform.social.core.identity.model.Identity;
 import org.exoplatform.social.core.identity.provider.OrganizationIdentityProvider;
 import org.exoplatform.social.core.manager.IdentityManager;
@@ -85,6 +87,26 @@ public class NewsUtils {
     return spaces.stream()
                  .filter(space -> (spaceService.isManager(space, userId) || spaceService.isRedactor(space, userId)))
                  .collect(Collectors.toList());
+  }
+
+  public static org.exoplatform.services.security.Identity getCurrentUserIdentity() {
+    ConversationState currentConversationState = ConversationState.getCurrent();
+    return currentConversationState == null ? null : currentConversationState.getIdentity();
+  }
+
+  public static org.exoplatform.services.security.Identity getUserIdentity(String username) throws Exception {
+    IdentityRegistry identityRegistry = ExoContainerContext.getService(IdentityRegistry.class);
+    org.exoplatform.services.security.Identity identity = identityRegistry.getIdentity(username);
+    if (identity != null) {
+      return identity;
+    }
+    Authenticator authenticator = ExoContainerContext.getService(Authenticator.class);
+    identity = authenticator.createIdentity(username);
+    if (identity != null) {
+      // To cache identity for next times
+      identityRegistry.register(identity);
+    }
+    return identity;
   }
 
 }

@@ -1,7 +1,7 @@
 package org.exoplatform.news.search;
 
 import static org.junit.Assert.*;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import java.util.Date;
 
@@ -15,7 +15,7 @@ import org.exoplatform.social.core.manager.ActivityManager;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import org.exoplatform.commons.search.domain.Document;
 import org.exoplatform.container.xml.InitParams;
@@ -24,7 +24,7 @@ import org.exoplatform.social.core.identity.model.Identity;
 import org.exoplatform.social.core.identity.model.Profile;
 import org.exoplatform.social.core.manager.IdentityManager;
 
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(MockitoJUnitRunner.Silent.class)
 public class NewsIndexingServiceConnectorTest {
 
   NewsIndexingServiceConnector newsIndexingServiceConnector = null;
@@ -62,7 +62,7 @@ public class NewsIndexingServiceConnectorTest {
   }
 
   @Test
-  public void testCreate() {
+  public void testCreate() throws Exception {
     newsIndexingServiceConnector = new NewsIndexingServiceConnector(identityManager, getParams(), newsService, activityManager);
 
     try {
@@ -106,11 +106,7 @@ public class NewsIndexingServiceConnectorTest {
     Profile posterProfile = new Profile(posterIdentity);
     posterProfile.setProperty("fullName", "Root Root");
     posterIdentity.setProfile(posterProfile);
-    try {
-      when(newsService.getNewsById("1", false)).thenReturn(news);
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
+    when(newsService.getNewsById("1")).thenReturn(news);
     when(identityManager.getOrCreateIdentity(OrganizationIdentityProvider.NAME, "root")).thenReturn(posterIdentity);
     when(activityManager.getActivity("1")).thenReturn(activity);
 

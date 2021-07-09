@@ -12,11 +12,12 @@ import org.exoplatform.services.listener.Listener;
 import org.exoplatform.services.listener.ListenerService;
 import org.exoplatform.services.log.ExoLogger;
 import org.exoplatform.services.log.Log;
+import org.exoplatform.services.security.Identity;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class NewsGamificationIntegrationListener extends Listener<String, String> {
+public class NewsGamificationIntegrationListener extends Listener<String, Identity> {
   private static final Log   LOG                                         =
                                  ExoLogger.getLogger(NewsGamificationIntegrationListener.class);
 
@@ -39,14 +40,15 @@ public class NewsGamificationIntegrationListener extends Listener<String, String
   }
 
   @Override
-  public void onEvent(Event<String, String> event) throws Exception {
+  public void onEvent(Event<String, Identity> event) throws Exception {
     ExoContainerContext.setCurrentContainer(container);
     RequestLifeCycle.begin(container);
     try {
       String eventName = event.getEventName();
       String newsId = event.getSource();
-      String earnerId = event.getData();
-      News news = newsService.getNewsById(newsId, false);
+      Identity earner = event.getData();
+      String earnerId = earner.getUserId();
+      News news = newsService.getNewsById(newsId);
       String ruleTitle = "";
       if (StringUtils.equals(eventName, NewsUtils.POST_NEWS)) {
         ruleTitle = GAMIFICATION_POST_NEWS_ARTICLE_RULE_TITLE;
