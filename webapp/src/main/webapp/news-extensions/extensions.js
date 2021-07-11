@@ -39,6 +39,7 @@ const newsActivityTypeExtensionOptions = {
       };
     }
   },
+  extendSharedActivity: (activity, isActivityDetail) => isActivityDetail,
   showSharedInformationFooter: (activity, isActivityDetail) => isActivityDetail,
   init: (activity, isActivityDetail) => {
     if (!isActivityDetail) {
@@ -50,6 +51,7 @@ const newsActivityTypeExtensionOptions = {
     }
   },
   canEdit: () => false,
+  canShare: () => true,
   supportsThumbnail: true,
   getThumbnail: (activity) => activity && activity.news && activity.news.illustrationURL || '/news/images/news.png',
   getThumbnailProperties: (activity) => !(activity && activity.news && activity.news.illustrationURL) && {
