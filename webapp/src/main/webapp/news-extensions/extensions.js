@@ -43,11 +43,12 @@ const newsActivityTypeExtensionOptions = {
   showSharedInformationFooter: (activity, isActivityDetail) => isActivityDetail,
   init: (activity, isActivityDetail) => {
     if (!isActivityDetail) {
-      const newsId = activity && activity.templateParams && activity.templateParams.newsId;
-      if (newsId) {
-        return Vue.prototype.$newsServices.getNewsById(newsId)
-          .then(news => activity.news = news);
+      let activityId = activity.id;
+      if (activity.parentActivity) {
+        activityId = activity.parentActivity.id;
       }
+      return Vue.prototype.$newsServices.getNewsByActivityId(activityId)
+        .then(news => activity.news = news);
     }
   },
   canEdit: () => false,
@@ -105,8 +106,4 @@ export function initExtensions() {
     options: newsActivityTypeExtensionOptions,
   });
 
-  extensionRegistry.registerExtension('activity', 'type', {
-    type: 'shared_news',
-    options: newsActivityTypeExtensionOptions,
-  });
 }

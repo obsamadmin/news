@@ -1,6 +1,7 @@
 package org.exoplatform.news.listener;
 
 import org.exoplatform.news.NewsService;
+import org.exoplatform.news.model.News;
 import org.exoplatform.services.log.ExoLogger;
 import org.exoplatform.services.log.Log;
 import org.exoplatform.social.core.activity.ActivityLifeCycleEvent;
@@ -12,6 +13,11 @@ import org.exoplatform.social.core.manager.IdentityManager;
 import org.exoplatform.social.core.space.model.Space;
 import org.exoplatform.social.core.space.spi.SpaceService;
 
+/**
+ * A triggered listener class about activity lifecyles. This class is used to
+ * propagate sharing activity in News elements to let targeted space members to
+ * access News in JCR (especially for illustration)
+ */
 public class NewsActivityListener extends ActivityListenerPlugin {
 
   private static final Log LOG = ExoLogger.getLogger(NewsActivityListener.class);
@@ -37,18 +43,22 @@ public class NewsActivityListener extends ActivityListenerPlugin {
   @Override
   public void shareActivity(ActivityLifeCycleEvent event) {
     ExoSocialActivity sharedActivity = event.getActivity();
-    if (sharedActivity.getTemplateParams() != null && sharedActivity.getTemplateParams().containsKey("originalActivityId")) {
+    if (sharedActivity != null && sharedActivity.getTemplateParams() != null
+        && sharedActivity.getTemplateParams().containsKey("originalActivityId")) {
       String originalActivityId = sharedActivity.getTemplateParams().get("originalActivityId");
       ExoSocialActivity originalActivity = activityManager.getActivity(originalActivityId);
       if (originalActivity != null && originalActivity.getTemplateParams() != null
           && originalActivity.getTemplateParams().containsKey("newsId")) {
-        Identity posterIdentity = getIdentity(sharedActivity);
-        Space space = getSpace(sharedActivity);
         String newsId = originalActivity.getTemplateParams().get("newsId");
         try {
-          newsService.shareNews(newsId, space, posterIdentity);
+          News news = newsService.getNewsById(newsId, false);
+          if (news != null) {
+            Identity posterIdentity = getIdentity(sharedActivity);
+            Space space = getSpace(sharedActivity);
+            newsService.shareNews(news, space, posterIdentity);
+          }
         } catch (Exception e) {
-          LOG.error("Error while sharing news {} activity", newsId, e);
+          LOG.error("Error while sharing news {} to activity {}", newsId, sharedActivity.getId(), e);
         }
       }
     }

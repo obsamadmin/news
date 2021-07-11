@@ -16,10 +16,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.picocontainer.Startable;
 
 import org.exoplatform.common.http.HTTPStatus;
+import org.exoplatform.commons.exception.ObjectNotFoundException;
 import org.exoplatform.commons.utils.CommonsUtils;
 import org.exoplatform.container.ExoContainerContext;
 import org.exoplatform.container.PortalContainer;
 import org.exoplatform.container.component.RequestLifeCycle;
+import org.exoplatform.deprecation.DeprecatedAPI;
 import org.exoplatform.news.NewsAttachmentsService;
 import org.exoplatform.news.NewsService;
 import org.exoplatform.news.filter.NewsFilter;
@@ -275,42 +277,20 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
                               @ApiParam(value = "News id", required = true) @PathParam("id") String id,
                               @ApiParam(value = "fields", required = true) @QueryParam("fields") String fields,
                               @ApiParam(value = "Is edit mode", defaultValue = "false") @QueryParam("editMode") boolean editMode) {
+    String authenticatedUser = request.getRemoteUser();
     try {
-
       if (StringUtils.isBlank(id)) {
         return Response.status(Response.Status.BAD_REQUEST).build();
       }
-      String authenticatedUser = request.getRemoteUser();
-      News news = newsService.getNewsById(id, editMode);
+      News news = newsService.getNewsById(id, authenticatedUser, editMode);
       if (news == null) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
-      Space newsSpace = spaceService.getSpaceById(news.getSpaceId());
-      if (StringUtils.equals(news.getPublicationState(), PublicationDefaultStates.STAGED)
-          && !canViewScheduledNews(authenticatedUser, newsSpace, news)) {
-        return Response.status(Response.Status.UNAUTHORIZED).build();
-      }
-      if (!news.isPinned() && StringUtils.equals(news.getPublicationState(), PublicationDefaultStates.PUBLISHED)
-          && !canViewNews(authenticatedUser, newsSpace)) {
-        return Response.status(Response.Status.UNAUTHORIZED).build();
-      }
-      
       news.setIllustration(null);
-
-      if (StringUtils.isNotEmpty(fields) && fields.equals("spaces")) {
-        News filteredNews = new News();
-        Set<Space> spacesList = new HashSet<>();
-        String newsActivities = news.getActivities();
-        for (String act : newsActivities.split(";")) {
-          String spaceId = act.split(":")[0];
-          Space space = spaceService.getSpaceById(spaceId);
-          spacesList.add(space);
-        }
-        filteredNews.setSharedInSpacesList(spacesList);
-        return Response.ok(filteredNews).build();
-      } else {
-        return Response.ok(news).build();
-      }
+      return Response.ok(news).build();
+    } catch (IllegalAccessException e) {
+      LOG.warn("User {} attempt to access unauthorized news with id {}", authenticatedUser, id);
+      return Response.status(Response.Status.NOT_FOUND).build();
     } catch (Exception e) {
       LOG.error("Error when getting the news " + id, e);
       return Response.serverError().build();
@@ -318,54 +298,36 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
   }
 
   @GET
-  @Path("byActivity/{id}")
+  @Path("byActivity/{activityId}")
   @RolesAllowed("users")
   @Produces(MediaType.APPLICATION_JSON)
-  @ApiOperation(value = "Get a news", httpMethod = "GET", response = Response.class, notes = "This gets the news with the given id if the authenticated user is a member of the space or a spaces super manager.")
-  @ApiResponses(value = { @ApiResponse(code = 200, message = "News returned"),
+  @ApiOperation(value = "Get a news identified by its activity or shared activity identifier", httpMethod = "GET", response = Response.class, notes = "This gets the news with the given id if the authenticated user is a member of the space or a spaces super manager.")
+  @ApiResponses(value = {
+      @ApiResponse(code = 200, message = "News returned"),
       @ApiResponse(code = 401, message = "User not authorized to get the news"),
-      @ApiResponse(code = 404, message = "News not found"), @ApiResponse(code = 500, message = "Internal server error") })
+      @ApiResponse(code = 404, message = "News not found"),
+      @ApiResponse(code = 500, message = "Internal server error")
+  })
   public Response getNewsByActivityId(@Context HttpServletRequest request,
-                                      @ApiParam(value = "News id", required = true) @PathParam("id") String id,
-                                      @ApiParam(value = "fields", required = true) @QueryParam("fields") String fields) {
+                                      @ApiParam(value = "Activity id", required = true) @PathParam("activityId") String activityId) {
+    if (StringUtils.isBlank(activityId)) {
+      return Response.status(Response.Status.BAD_REQUEST).build();
+    }
+    String authenticatedUser = request.getRemoteUser();
     try {
-      if (StringUtils.isBlank(id)) {
-        return Response.status(Response.Status.BAD_REQUEST).build();
-      }
-      String authenticatedUser = request.getRemoteUser();
-      News news = newsService.getNewsByActivityId(id, authenticatedUser);
-
+      News news = newsService.getNewsByActivityId(activityId, authenticatedUser);
       if (news == null) {
         return Response.status(Response.Status.NOT_FOUND).build();
       }
-      Space newsSpace = spaceService.getSpaceById(news.getSpaceId());
-      if (StringUtils.equals(news.getPublicationState(), PublicationDefaultStates.STAGED)
-          && !canViewScheduledNews(authenticatedUser, newsSpace, news)) {
-        return Response.status(Response.Status.UNAUTHORIZED).build();
-      }
-      if (!news.isPinned() && StringUtils.equals(news.getPublicationState(), PublicationDefaultStates.PUBLISHED)
-          && !canViewNews(authenticatedUser, newsSpace)) {
-        return Response.status(Response.Status.UNAUTHORIZED).build();
-      }
-
       news.setIllustration(null);
-      
-      if (StringUtils.isNotEmpty(fields) && fields.equals("spaces")) {
-        News filteredNews = new News();
-        Set<Space> spacesList = new HashSet<>();
-        String newsActivities = news.getActivities();
-        for (String act : newsActivities.split(";")) {
-          String spaceId = act.split(":")[0];
-          Space space = spaceService.getSpaceById(spaceId);
-          spacesList.add(space);
-        }
-        filteredNews.setSharedInSpacesList(spacesList);
-        return Response.ok(filteredNews).build();
-      } else {
-        return Response.ok(news).build();
-      }
+      return Response.ok(news).build();
+    } catch (IllegalAccessException e) {
+      LOG.warn("User {} attempt to access unauthorized news with id {}", authenticatedUser, activityId);
+      return Response.status(Response.Status.NOT_FOUND).build();
+    } catch (ObjectNotFoundException e) {
+      return Response.status(Response.Status.NOT_FOUND).build();
     } catch (Exception e) {
-      LOG.error("Error when getting the news " + id, e);
+      LOG.error("Error when getting the news " + activityId, e);
       return Response.serverError().build();
     }
   }
@@ -674,28 +636,11 @@ public class NewsRestResourcesV1 implements ResourceContainer, Startable {
       @ApiResponse(code = 400, message = "Invalid query input"),
       @ApiResponse(code = 401, message = "User not authorized to update the news"),
       @ApiResponse(code = 500, message = "Internal server error") })
+  @Deprecated
+  @DeprecatedAPI(value = "Should use getNews with editMode = false instead of this", insist = true)
   public Response viewNews(@Context HttpServletRequest request,
                            @ApiParam(value = "News id", required = true) @PathParam("id") String id) {
-
-    try {
-      News news = newsService.getNewsById(id, false);
-      if (news == null) {
-        return Response.status(Response.Status.NOT_FOUND).build();
-      }
-      String authenticatedUser = ConversationState.getCurrent().getIdentity().getUserId();
-      if (!news.isPinned()) {
-        Space space = spaceService.getSpaceById(news.getSpaceId());
-        if (StringUtils.isBlank(authenticatedUser) || !canViewNews(authenticatedUser, space)) {
-          return Response.status(Response.Status.UNAUTHORIZED).build();
-        }
-      }
-      newsService.markAsRead(news, authenticatedUser);
-      return Response.ok().build();
-
-    } catch (Exception e) {
-      LOG.error("Error when trying to update the news " + id, e);
-      return Response.serverError().build();
-    }
+    return getNewsById(request, id, null, false);
   }
 
   @DELETE

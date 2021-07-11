@@ -56,12 +56,13 @@ export default {
   },
   methods: {
     retrieveNews() {
-      this.$newsServices.getNewsById(this.newsId || this.sharedNewsId)
+      this.$newsServices.getNewsByActivityId(this.activityId)
         .then(news => {
           this.news = news;
           if (!this.news) {
             this.$root.$emit('activity-extension-abort', this.activityId);
           }
+          this.activity.news = news;
         })
         .catch(() => {
           this.$root.$emit('activity-extension-abort', this.activityId);

@@ -83,6 +83,8 @@ import org.exoplatform.upload.UploadService;
  */
 public class NewsServiceImpl implements NewsService {
 
+  public static final String[]     SHARE_NEWS_PERMISSIONS          = new String[] { PermissionType.READ };
+
   public static final String       NEWS_NODES_FOLDER               = "News";
 
   public static final String       PINNED_NEWS_NODES_FOLDER        = "Pinned";
@@ -223,32 +225,23 @@ public class NewsServiceImpl implements NewsService {
     return news;
   }
 
-  /**
-   * Get a news by id
-   * 
-   * @param id Id of the news
-   * @param editMode
-   * @return The news with the given id
-   * @throws Exception when error
-   */
-  public News getNewsById(String id, boolean editMode) throws Exception {
+  @Override
+  public News getNewsById(String newsId, boolean editMode) {
     SessionProvider sessionProvider = SessionProvider.createSystemProvider();
-
-    Session session = sessionProvider.getSession(
-                                                 repositoryService.getCurrentRepository()
-                                                                  .getConfiguration()
-                                                                  .getDefaultWorkspaceName(),
-                                                 repositoryService.getCurrentRepository());
-
     try {
-      Node node = session.getNodeByUUID(id);
+      Session session = sessionProvider.getSession(
+                                                   repositoryService.getCurrentRepository()
+                                                   .getConfiguration()
+                                                   .getDefaultWorkspaceName(),
+                                                   repositoryService.getCurrentRepository());
+      Node node = session.getNodeByUUID(newsId);
       return convertNodeToNews(node, editMode);
     } catch (ItemNotFoundException e) {
       return null;
+    } catch (Exception e) {
+      throw new IllegalStateException("An error occurred while retrieving news with id " + newsId, e);
     } finally {
-      if (session != null) {
-        session.logout();
-      }
+      sessionProvider.close();
     }
   }
 
@@ -501,7 +494,7 @@ public class NewsServiceImpl implements NewsService {
     if (newsNode.canAddMixin("exo:privilegeable")) {
       newsNode.addMixin("exo:privilegeable");
     }
-    ((ExtendedNode) newsNode).setPermission("*:/platform/users", new String[] { PermissionType.READ });
+    ((ExtendedNode) newsNode).setPermission("*:/platform/users", SHARE_NEWS_PERMISSIONS);
 
     newsAttachmentsService.makeAttachmentsPublic(newsNode);
 
@@ -589,17 +582,14 @@ public class NewsServiceImpl implements NewsService {
   }
 
   @Override
-  public void shareNews(String newsId, Space space, Identity userIdentity) throws IllegalAccessException, ObjectNotFoundException {
-    if (!canViewNews(newsId, userIdentity.getId())) {
-      throw new IllegalAccessException("User with id " + userIdentity.getId() + "doesn't have access to news");
+  public void shareNews(News news, Space space, Identity userIdentity) throws IllegalAccessException, ObjectNotFoundException {
+    if (!canViewNews(news, userIdentity.getRemoteId())) {
+      throw new IllegalAccessException("User with id " + userIdentity.getRemoteId() + "doesn't have access to news");
     }
+    String newsId = news.getId();
     SessionProvider sessionProvider = SessionProvider.createSystemProvider();
     try {
-      Session session = sessionProvider.getSession(repositoryService.getCurrentRepository()
-                                                                    .getConfiguration()
-                                                                    .getDefaultWorkspaceName(),
-                                                   repositoryService.getCurrentRepository());
-      Node newsNode = session.getNodeByUUID(newsId);
+      ExtendedNode newsNode = (ExtendedNode) getNewsNodeById(newsId, sessionProvider);
       if (newsNode == null) {
         throw new ObjectNotFoundException("News with id " + newsId + "wasn't found");
       }
@@ -607,7 +597,7 @@ public class NewsServiceImpl implements NewsService {
       if (newsNode.canAddMixin("exo:privilegeable")) {
         newsNode.addMixin("exo:privilegeable");
       }
-      ((ExtendedNode) newsNode).setPermission("*:" + space.getGroupId(), new String[] { PermissionType.READ });
+      newsNode.setPermission("*:" + space.getGroupId(), SHARE_NEWS_PERMISSIONS);
       newsNode.save();
     } catch (RepositoryException e) {
       throw new IllegalStateException("Error while sharing news with id " + newsId + " to space " + space.getId() + " by user"
@@ -1090,42 +1080,99 @@ public class NewsServiceImpl implements NewsService {
   }
 
   @Override
-  public boolean canViewNews(String newsId, String posterIdentityId) {
-    try {
-      String spaceId = getNewsSpaceId(newsId);
-      Space space = spaceId == null ? null : spaceService.getSpaceById(spaceId);
-      if (space == null) {
-        return false;
+  public News getNewsById(String newsId, String authenticatedUser, boolean editMode) throws IllegalAccessException {
+    News news = getNewsById(newsId, editMode);
+    if (editMode) {
+      if (!canEditNews(news, authenticatedUser)) {
+        throw new IllegalAccessException("User " + authenticatedUser + " is not authorized to view News");
       }
-      Identity posterIdentity = identityManager.getIdentity(posterIdentityId);
-      if (posterIdentity == null) {
-        LOG.warn("Can't find user with id {} when checking access on news with id {}", posterIdentityId, newsId);
-        return false;
-      }
-      String posterUserName = posterIdentity.getRemoteId();
-      return spaceService.isMember(space, posterUserName)
-          || spaceService.isSuperManager(posterIdentity.getRemoteId());
-    } catch (Exception e) {
-      LOG.warn("Error retrieving access permission for user {} on news with id {}", posterIdentityId, newsId);
-      return false;
+    } else if (!canViewNews(news, authenticatedUser)) {
+      throw new IllegalAccessException("User " + authenticatedUser + " is not authorized to view News");
     }
+    return news;
   }
 
-  private String getNewsSpaceId(String newsId) throws RepositoryException {
-    SessionProvider sessionProvider = SessionProvider.createSystemProvider();
-    try {
-      Session session = sessionProvider.getSession(
-                                                   repositoryService.getCurrentRepository()
-                                                                    .getConfiguration()
-                                                                    .getDefaultWorkspaceName(),
-                                                   repositoryService.getCurrentRepository());
-      Node node = session.getNodeByUUID(newsId);
-      return node.getProperty("exo:spaceId").getString();
-    } catch (ItemNotFoundException | PathNotFoundException e) {
-      return null;
-    } finally {
-      sessionProvider.close();
+  @Override
+  public News getNewsByActivityId(String activityId, String authenticatedUser) throws IllegalAccessException,
+                                                                               ObjectNotFoundException {
+    ExoSocialActivity activity = activityManager.getActivity(activityId);
+    if (activity == null) {
+      throw new ObjectNotFoundException("Activity with id " + activityId + " wasn't found");
     }
+    org.exoplatform.services.security.Identity viewerIdentity = NewsUtils.getUserIdentity(authenticatedUser);
+    if (!activityManager.isActivityViewable(activity, viewerIdentity)) {
+      throw new IllegalAccessException("User " + authenticatedUser + " isn't allowed to access activity with id " + activityId);
+    }
+    Map<String, String> templateParams = activity.getTemplateParams();
+    if (templateParams == null) {
+      throw new ObjectNotFoundException("Activity with id " + activityId + " isn't of type news nor a shared news");
+    }
+    String newsId = templateParams.get("newsId");
+    if (StringUtils.isBlank(newsId)) {
+      String originalActivityId = templateParams.get("originalActivityId");
+      if (StringUtils.isNotBlank(originalActivityId)) {
+        Identity sharedActivityPosterIdentity = identityManager.getIdentity(activity.getPosterId());
+        if (sharedActivityPosterIdentity == null) {
+          throw new IllegalAccessException("Shared Activity '" + activityId + "' Poster " + activity.getPosterId()
+              + " isn't found");
+        }
+        return getNewsByActivityId(originalActivityId, sharedActivityPosterIdentity.getRemoteId());
+      }
+      throw new ObjectNotFoundException("Activity with id " + activityId + " isn't of type news nor a shared news");
+    }
+    return getNewsById(newsId, authenticatedUser, false);
+  }
+
+  @Override
+  public boolean canViewNews(News news, String username) {
+    try {
+      String spaceId = news.getSpaceId();
+      Space space = spaceId == null ? null : spaceService.getSpaceById(spaceId);
+      if (space == null) {
+        LOG.warn("Can't find space with id {} when checking access on news with id {}", spaceId, news.getId());
+        return false;
+      }
+      if (!news.isPinned()
+          && StringUtils.equals(news.getPublicationState(), PublicationDefaultStates.PUBLISHED)
+          && !(spaceService.isSuperManager(username)
+              || spaceService.isMember(space, username))) {
+        return false;
+      }
+      if (StringUtils.equals(news.getPublicationState(), PublicationDefaultStates.STAGED)
+          && !(StringUtils.equals(news.getAuthor(), username)
+              || spaceService.isManager(space, username)
+              || spaceService.isRedactor(space, username))) {
+        return false;
+      }
+    } catch (Exception e) {
+      LOG.warn("Error retrieving access permission for user {} on news with id {}", username, news.getId());
+      return false;
+    }
+    return true;
+  }
+
+  @Override
+  public boolean canEditNews(News news, String authenticatedUser) {
+    String spaceId = news.getSpaceId();
+    Space space = spaceId == null ? null : spaceService.getSpaceById(spaceId);
+    if (space == null) {
+      return false;
+    }
+    Identity authenticatedUserIdentity = identityManager.getOrCreateUserIdentity(authenticatedUser);
+    if (authenticatedUserIdentity == null) {
+      LOG.warn("Can't find user with id {} when checking access on news with id {}", authenticatedUser, news.getId());
+      return false;
+    }
+    String posterUsername = news.getAuthor();
+    if (authenticatedUser.equals(posterUsername) || spaceService.isSuperManager(authenticatedUser)) {
+      return true;
+    }
+    Space currentSpace = spaceService.getSpaceById(spaceId);
+    if (spaceService.isManager(currentSpace, authenticatedUser)) {
+      return true;
+    }
+    org.exoplatform.services.security.Identity authenticatedSecurityIdentity = NewsUtils.getUserIdentity(authenticatedUser);
+    return authenticatedSecurityIdentity.isMemberOf(PLATFORM_WEB_CONTRIBUTORS_GROUP, PUBLISHER_MEMBERSHIP_NAME);
   }
 
   /**
@@ -1401,6 +1448,19 @@ public class NewsServiceImpl implements NewsService {
       return buf.toString();
     }
     return message;
+  }
+
+  public Node getNewsNodeById(String newsId, SessionProvider sessionProvider) throws RepositoryException, ItemNotFoundException {
+    Session session = getSession(sessionProvider);
+    Node node = session.getNodeByUUID(newsId);
+    return node;
+  }
+
+  public Session getSession(SessionProvider sessionProvider) throws RepositoryException {
+    return sessionProvider.getSession(repositoryService.getCurrentRepository()
+                                                       .getConfiguration()
+                                                       .getDefaultWorkspaceName(),
+                                      repositoryService.getCurrentRepository());
   }
 
 }
