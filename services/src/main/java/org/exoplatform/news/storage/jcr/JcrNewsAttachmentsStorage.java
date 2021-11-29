@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2021 eXo Platform SAS.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
 package org.exoplatform.news.storage.jcr;
 
 import org.apache.commons.io.IOUtils;
@@ -34,6 +50,8 @@ import java.util.stream.Collectors;
 public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
 
   private static final Log LOG = ExoLogger.getLogger(JcrNewsAttachmentsStorage.class);
+  
+  private static final String JCR_CONTENT = "jcr:content";
 
   public static final String NEWS_ATTACHMENTS_NODES_FOLDER = "News Attachments";
 
@@ -116,7 +134,7 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
 
     Node attachmentNode = session.getNodeByUUID(attachmentId);
     if(attachmentNode != null) {
-      Node resourceNode = attachmentNode.getNode("jcr:content");
+      Node resourceNode = attachmentNode.getNode(JCR_CONTENT);
       return resourceNode.getProperty("jcr:data").getStream();
     }
     return null;
@@ -224,7 +242,7 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
     Node attachmentNode = newsAttachmentsFolderNode.addNode(uploadedResource.getFileName(), "nt:file");
     attachmentNode.addMixin("mix:versionable");
     attachmentNode.setProperty("exo:title", uploadedResource.getFileName());
-    Node resourceNode = attachmentNode.addNode("jcr:content", "nt:resource");
+    Node resourceNode = attachmentNode.addNode(JCR_CONTENT, "nt:resource");
     resourceNode.setProperty("jcr:mimeType", uploadedResource.getMimeType());
     Calendar now = Calendar.getInstance();
     resourceNode.setProperty("jcr:lastModified", now);
@@ -327,7 +345,7 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
     String mimetype = "";
     int attachmentSize = 0;
 
-    Node resourceNode = attachmentNode.getNode("jcr:content");
+    Node resourceNode = attachmentNode.getNode(JCR_CONTENT);
     if(resourceNode != null) {
       if (resourceNode.hasProperty("jcr:mimeType")) {
         mimetype = resourceNode.getProperty("jcr:mimeType").getString();

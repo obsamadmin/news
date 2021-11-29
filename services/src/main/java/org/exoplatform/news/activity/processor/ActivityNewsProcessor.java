@@ -16,6 +16,8 @@ public class ActivityNewsProcessor extends BaseActivityProcessorPlugin {
   private NewsService      newsService;
 
   private static final Log LOG = ExoLogger.getLogger(ActivityNewsProcessor.class);
+  
+  private static final String NEWS_ID = "newsId";
 
   public ActivityNewsProcessor(NewsService newsService, InitParams initParams) {
     super(initParams);
@@ -24,21 +26,21 @@ public class ActivityNewsProcessor extends BaseActivityProcessorPlugin {
 
   @Override
   public void processActivity(ExoSocialActivity activity) {
-    if (activity.isComment() || activity.getType() == null || !activity.getTemplateParams().containsKey("newsId")) {
+    if (activity.isComment() || activity.getType() == null || !activity.getTemplateParams().containsKey(NEWS_ID)) {
       return;
     }
     if (activity.getLinkedProcessedEntities() == null) {
       activity.setLinkedProcessedEntities(new HashMap<>());
     }
-    News news = (News) activity.getLinkedProcessedEntities().get("news");
+    News news = (News) activity.getLinkedProcessedEntities().get(NEWS_ID);
     if (news == null) {
       org.exoplatform.services.security.Identity currentIdentity = ConversationState.getCurrent().getIdentity();
       try {
-        news = newsService.getNewsById(activity.getTemplateParams().get("newsId"), currentIdentity, false);
+        news = newsService.getNewsById(activity.getTemplateParams().get(NEWS_ID), currentIdentity, false);
       } catch (IllegalAccessException e) {
         LOG.warn("User {} attempt to access unauthorized news with id {}",
                  currentIdentity.getUserId(),
-                 activity.getTemplateParams().get("newsId"),
+                 activity.getTemplateParams().get(NEWS_ID),
                  e);
       }
       activity.getLinkedProcessedEntities().put("news", news);
