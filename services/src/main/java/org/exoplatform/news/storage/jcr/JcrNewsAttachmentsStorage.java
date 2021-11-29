@@ -36,6 +36,7 @@ import org.exoplatform.services.jcr.ext.common.SessionProvider;
 import org.exoplatform.services.jcr.impl.core.value.StringValue;
 import org.exoplatform.services.log.ExoLogger;
 import org.exoplatform.services.log.Log;
+import org.exoplatform.services.wcm.core.NodetypeConstant;
 import org.exoplatform.social.core.space.model.Space;
 import org.exoplatform.social.core.space.spi.SpaceService;
 import org.exoplatform.upload.UploadResource;
@@ -51,9 +52,7 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
 
   private static final Log LOG = ExoLogger.getLogger(JcrNewsAttachmentsStorage.class);
   
-  private static final String JCR_CONTENT = "jcr:content";
-
-  public static final String NEWS_ATTACHMENTS_NODES_FOLDER = "News Attachments";
+  private static final String EXO_ATTACHMENTS_IDS = "exo:attachmentsIds";
 
   private SessionProviderService sessionProviderService;
 
@@ -68,6 +67,8 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
   private UploadService uploadService;
 
   private DocumentService documentService;
+  
+  public static final String NEWS_ATTACHMENTS_NODES_FOLDER = "News Attachments";
 
   public JcrNewsAttachmentsStorage(SessionProviderService sessionProviderService, RepositoryService repositoryService,
                                     NodeHierarchyCreator nodeHierarchyCreator, DataDistributionManager dataDistributionManager,
@@ -134,8 +135,8 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
 
     Node attachmentNode = session.getNodeByUUID(attachmentId);
     if(attachmentNode != null) {
-      Node resourceNode = attachmentNode.getNode(JCR_CONTENT);
-      return resourceNode.getProperty("jcr:data").getStream();
+      Node resourceNode = attachmentNode.getNode(NodetypeConstant.JCR_CONTENT);
+      return resourceNode.getProperty(NodetypeConstant.JCR_DATA).getStream();
     }
     return null;
   }
@@ -174,8 +175,8 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
 
     // attachments to remove
     List<String> existingAttachmentsIds = new ArrayList<>();
-    if (newsNode.hasProperty("exo:attachmentsIds")) {
-      Value[] attachmentsIdsProperty = newsNode.getProperty("exo:attachmentsIds").getValues();
+    if (newsNode.hasProperty(EXO_ATTACHMENTS_IDS)) {
+      Value[] attachmentsIdsProperty = newsNode.getProperty(EXO_ATTACHMENTS_IDS).getValues();
       existingAttachmentsIds = Arrays.stream(attachmentsIdsProperty).map(value -> {
         try {
           return value.getString();
@@ -239,18 +240,18 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
     Node spaceNewsAttachmentsRootNode = getSpaceNewsAttachmentsRootNode(newsNode.getProperty("exo:spaceId").getString(), newsNode.getSession());
     Node newsAttachmentsFolderNode = dataDistributionType.getOrCreateDataNode(spaceNewsAttachmentsRootNode, getNodeRelativePath(Calendar.getInstance()));
 
-    Node attachmentNode = newsAttachmentsFolderNode.addNode(uploadedResource.getFileName(), "nt:file");
-    attachmentNode.addMixin("mix:versionable");
-    attachmentNode.setProperty("exo:title", uploadedResource.getFileName());
-    Node resourceNode = attachmentNode.addNode(JCR_CONTENT, "nt:resource");
-    resourceNode.setProperty("jcr:mimeType", uploadedResource.getMimeType());
+    Node attachmentNode = newsAttachmentsFolderNode.addNode(uploadedResource.getFileName(), NodetypeConstant.NT_FILE);
+    attachmentNode.addMixin(NodetypeConstant.MIX_VERSIONABLE);
+    attachmentNode.setProperty(NodetypeConstant.EXO_TITLE, uploadedResource.getFileName());
+    Node resourceNode = attachmentNode.addNode(NodetypeConstant.JCR_CONTENT, NodetypeConstant.NT_RESOURCE);
+    resourceNode.setProperty(NodetypeConstant.JCR_MIME_TYPE, uploadedResource.getMimeType());
     Calendar now = Calendar.getInstance();
-    resourceNode.setProperty("jcr:lastModified", now);
-    resourceNode.setProperty("exo:dateModified", now);
+    resourceNode.setProperty(NodetypeConstant.JCR_LAST_MODIFIED, now);
+    resourceNode.setProperty(NodetypeConstant.EXO_DATE_MODIFIED, now);
     String fileDiskLocation = uploadedResource.getStoreLocation();
     if(fileDiskLocation != null) {
       try (InputStream inputStream = new FileInputStream(fileDiskLocation)) {
-        resourceNode.setProperty("jcr:data", inputStream);
+        resourceNode.setProperty(NodetypeConstant.JCR_DATA, inputStream);
         newsAttachmentsFolderNode.save();
       }
     } else {
@@ -258,12 +259,12 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
     }
 
     Value[] attachmentsIdsProperty;
-    if(newsNode.hasProperty("exo:attachmentsIds")) {
-      attachmentsIdsProperty = newsNode.getProperty("exo:attachmentsIds").getValues();
+    if(newsNode.hasProperty(EXO_ATTACHMENTS_IDS)) {
+      attachmentsIdsProperty = newsNode.getProperty(EXO_ATTACHMENTS_IDS).getValues();
     } else {
       attachmentsIdsProperty = new Value[0];
     }
-    newsNode.setProperty("exo:attachmentsIds", ArrayUtils.add(attachmentsIdsProperty, new StringValue(attachmentNode.getUUID())));
+    newsNode.setProperty(EXO_ATTACHMENTS_IDS, ArrayUtils.add(attachmentsIdsProperty, new StringValue(attachmentNode.getUUID())));
     newsNode.save();
 
     return attachmentNode.getUUID();
@@ -279,12 +280,12 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
   @Override
   public void addAttachmentFromExistingResource(Node newsNode, String resourceId) throws Exception {
     Value[] attachmentsIdsProperty;
-    if (newsNode.hasProperty("exo:attachmentsIds")) {
-      attachmentsIdsProperty = newsNode.getProperty("exo:attachmentsIds").getValues();
+    if (newsNode.hasProperty(EXO_ATTACHMENTS_IDS)) {
+      attachmentsIdsProperty = newsNode.getProperty(EXO_ATTACHMENTS_IDS).getValues();
     } else {
       attachmentsIdsProperty = new Value[0];
     }
-    newsNode.setProperty("exo:attachmentsIds", ArrayUtils.add(attachmentsIdsProperty, new StringValue(resourceId)));
+    newsNode.setProperty(EXO_ATTACHMENTS_IDS, ArrayUtils.add(attachmentsIdsProperty, new StringValue(resourceId)));
     newsNode.save();
   }
 
@@ -292,8 +293,8 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
   public void makeAttachmentsPublic(Node newsNode) throws Exception {
     for (Node attachmentNode : getAttachmentsNodesOfNews(newsNode)) {
       try {
-        if (attachmentNode.canAddMixin("exo:privilegeable")) {
-          attachmentNode.addMixin("exo:privilegeable");
+        if (attachmentNode.canAddMixin(NodetypeConstant.EXO_PRIVILEGEABLE)) {
+          attachmentNode.addMixin(NodetypeConstant.EXO_PRIVILEGEABLE);
         }
         ((ExtendedNode)attachmentNode).setPermission("*:/platform/users", new String[] { PermissionType.READ });
         attachmentNode.save();
@@ -307,7 +308,7 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
   public void unmakeAttachmentsPublic(Node newsNode) throws Exception {
     for (Node attachmentNode : getAttachmentsNodesOfNews(newsNode)) {
       try {
-        if (attachmentNode.isNodeType("exo:privilegeable")) {
+        if (attachmentNode.isNodeType(NodetypeConstant.EXO_PRIVILEGEABLE)) {
           ((ExtendedNode)attachmentNode).removePermission("*:/platform/users");
           attachmentNode.save();
         }
@@ -331,9 +332,9 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
         attachmentNode.remove();
       }
       Value[] attachmentsIdsProperty;
-      if(newsNode.hasProperty("exo:attachmentsIds")) {
-        attachmentsIdsProperty = newsNode.getProperty("exo:attachmentsIds").getValues();
-        newsNode.setProperty("exo:attachmentsIds", ArrayUtils.removeElement(attachmentsIdsProperty, new StringValue(attachmentId)));
+      if(newsNode.hasProperty(EXO_ATTACHMENTS_IDS)) {
+        attachmentsIdsProperty = newsNode.getProperty(EXO_ATTACHMENTS_IDS).getValues();
+        newsNode.setProperty(EXO_ATTACHMENTS_IDS, ArrayUtils.removeElement(attachmentsIdsProperty, new StringValue(attachmentId)));
         newsNode.save();
       }
     } catch (Exception e) {
@@ -345,32 +346,31 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
     String mimetype = "";
     int attachmentSize = 0;
 
-    Node resourceNode = attachmentNode.getNode(JCR_CONTENT);
+    Node resourceNode = attachmentNode.getNode(NodetypeConstant.JCR_CONTENT);
     if(resourceNode != null) {
-      if (resourceNode.hasProperty("jcr:mimeType")) {
-        mimetype = resourceNode.getProperty("jcr:mimeType").getString();
+      if (resourceNode.hasProperty(NodetypeConstant.JCR_MIME_TYPE)) {
+        mimetype = resourceNode.getProperty(NodetypeConstant.JCR_MIME_TYPE).getString();
       }
-      InputStream attachmentStream = resourceNode.getProperty("jcr:data").getStream();
+      InputStream attachmentStream = resourceNode.getProperty(NodetypeConstant.JCR_DATA).getStream();
       byte[] attachmentBytes = IOUtils.toByteArray(attachmentStream);
       attachmentSize = attachmentBytes.length;
     }
 
-    NewsAttachment attachment = new NewsAttachment(attachmentNode.getUUID(), null, attachmentNode.getName(), mimetype, attachmentSize);
-    return attachment;
+    return new NewsAttachment(attachmentNode.getUUID(), null, attachmentNode.getName(), mimetype, attachmentSize);
   }
 
   private Node getSpaceNewsAttachmentsRootNode(String spaceId, Session session) throws RepositoryException {
     Space space = spaceService.getSpaceById(spaceId);
     String groupPath = nodeHierarchyCreator.getJcrPath(BasePath.CMS_GROUPS_PATH);
-    String spaceDocumentsFolderPath = groupPath + space.getGroupId() + "/Documents";
+    String spaceDocumentsFolderPath = groupPath + space.getGroupId() + "/" + NodetypeConstant.DOCUMENTS;
 
     Node spaceDocumentsFolderNode = (Node) session.getItem(spaceDocumentsFolderPath);
 
     Node spaceNewsRootNode;
     if(!spaceDocumentsFolderNode.hasNode(NEWS_ATTACHMENTS_NODES_FOLDER)) {
-      spaceNewsRootNode = spaceDocumentsFolderNode.addNode(NEWS_ATTACHMENTS_NODES_FOLDER, "nt:unstructured");
-      if(spaceNewsRootNode.canAddMixin("exo:privilegeable")) {
-        spaceNewsRootNode.addMixin("exo:privilegeable");
+      spaceNewsRootNode = spaceDocumentsFolderNode.addNode(NEWS_ATTACHMENTS_NODES_FOLDER, NodetypeConstant.NT_UNSTRUCTURED);
+      if(spaceNewsRootNode.canAddMixin(NodetypeConstant.EXO_PRIVILEGEABLE)) {
+        spaceNewsRootNode.addMixin(NodetypeConstant.EXO_PRIVILEGEABLE);
       }
       Map<String, String[]> permissions = new HashMap<>();
       permissions.put("*:/platform/administrators", PermissionType.ALL);
@@ -386,8 +386,8 @@ public class JcrNewsAttachmentsStorage implements NewsAttachmentsStorage {
 
   private List<Node> getAttachmentsNodesOfNews(Node newsNode) throws Exception {
     List<Node> attachmentsNode = new ArrayList<>();
-    if(newsNode != null && newsNode.hasProperty("exo:attachmentsIds")) {
-      Property attachmentsIdsProperty = newsNode.getProperty("exo:attachmentsIds");
+    if(newsNode != null && newsNode.hasProperty(EXO_ATTACHMENTS_IDS)) {
+      Property attachmentsIdsProperty = newsNode.getProperty(EXO_ATTACHMENTS_IDS);
       if (attachmentsIdsProperty != null) {
         for (Value value : attachmentsIdsProperty.getValues()) {
           String attachmentId = value.getString();

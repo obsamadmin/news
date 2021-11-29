@@ -63,6 +63,7 @@ import org.exoplatform.news.model.News;
 import org.exoplatform.news.queryBuilder.NewsQueryBuilder;
 import org.exoplatform.news.storage.NewsAttachmentsStorage;
 import org.exoplatform.news.storage.NewsStorage;
+import org.exoplatform.news.utils.NewsUtils;
 import org.exoplatform.services.cms.BasePath;
 import org.exoplatform.services.cms.impl.Utils;
 import org.exoplatform.services.cms.link.LinkManager;
@@ -82,6 +83,7 @@ import org.exoplatform.services.log.ExoLogger;
 import org.exoplatform.services.log.Log;
 import org.exoplatform.services.security.ConversationState;
 import org.exoplatform.services.wcm.core.NodeLocation;
+import org.exoplatform.services.wcm.core.NodetypeConstant;
 import org.exoplatform.services.wcm.extensions.publication.PublicationManager;
 import org.exoplatform.services.wcm.extensions.publication.lifecycle.authoring.AuthoringPublicationConstant;
 import org.exoplatform.services.wcm.extensions.publication.lifecycle.impl.LifecyclesConfig.Lifecycle;
@@ -112,6 +114,10 @@ public class JcrNewsStorage implements NewsStorage {
   private static final Log         LOG                             = ExoLogger.getLogger(JcrNewsStorage.class);
   
   private static final Pattern     MENTION_PATTERN                  = Pattern.compile("@([^\\s<]+)|@([^\\s<]+)$");
+  
+  private static final String EXO_SUMMARY_PROP = "exo:summary";
+  
+  private static final String EXO_BODY_PROP = "exo:body";
   
   public static final String       MIX_NEWS_MODIFIERS               = "mix:newsModifiers";
 
@@ -222,11 +228,11 @@ public class JcrNewsStorage implements NewsStorage {
     }
     String newsNodeName = !news.getTitle().equals("") ? news.getTitle() : "Untitled";
     Node newsFolderNode = dataDistributionType.getOrCreateDataNode(spaceNewsRootNode, getNodeRelativePath(creationCalendar));
-    Node newsDraftNode = newsFolderNode.addNode(Utils.cleanName(newsNodeName).trim(), "exo:news");
+    Node newsDraftNode = newsFolderNode.addNode(Utils.cleanName(newsNodeName).trim(), NewsUtils.EXO_NEWS);
     newsDraftNode.addMixin("exo:datetime");
-    newsDraftNode.setProperty("exo:title", news.getTitle());
-    newsDraftNode.setProperty("exo:summary", news.getSummary());
-    newsDraftNode.setProperty("exo:body", news.getBody());
+    newsDraftNode.setProperty(NodetypeConstant.EXO_TITLE, news.getTitle());
+    newsDraftNode.setProperty(EXO_SUMMARY_PROP, news.getSummary());
+    newsDraftNode.setProperty(EXO_BODY_PROP, news.getBody());
     newsDraftNode.setProperty("exo:author", news.getAuthor());
     newsDraftNode.setProperty("exo:dateCreated", creationCalendar);
     newsDraftNode.setProperty("exo:viewsCount", 0);
@@ -265,7 +271,7 @@ public class JcrNewsStorage implements NewsStorage {
     }
     publicationService.enrollNodeInLifecycle(newsDraftNode, lifecycleName);
     publicationService.changeState(newsDraftNode, PublicationDefaultStates.DRAFT, new HashMap<>());
-    newsDraftNode.setProperty("exo:body", imageProcessor.processImages(news.getBody(), newsDraftNode.getUUID(), "images"));
+    newsDraftNode.setProperty(EXO_BODY_PROP, imageProcessor.processImages(news.getBody(), newsDraftNode.getUUID(), "images"));
     spaceNewsRootNode.save();
 
     if (StringUtils.isNotEmpty(news.getUploadId())) {
@@ -408,9 +414,9 @@ public class JcrNewsStorage implements NewsStorage {
     String portalName = PortalContainer.getCurrentPortalContainerName();
     String portalOwner = CommonsUtils.getCurrentPortalOwner();
 
-    news.setTitle(getStringProperty(node, "exo:title"));
-    news.setSummary(getStringProperty(node, "exo:summary"));
-    String body = getStringProperty(node, "exo:body");
+    news.setTitle(getStringProperty(node, NodetypeConstant.EXO_TITLE));
+    news.setSummary(getStringProperty(node, EXO_SUMMARY_PROP));
+    String body = getStringProperty(node, EXO_BODY_PROP);
     String sanitizedBody = HTMLSanitizer.sanitize(body);
     sanitizedBody = StringEscapeUtils.unescapeHtml(sanitizedBody);
     sanitizedBody = sanitizedBody.replaceAll(HTML_AT_SYMBOL_ESCAPED_PATTERN, HTML_AT_SYMBOL_PATTERN);
@@ -492,7 +498,7 @@ public class JcrNewsStorage implements NewsStorage {
       news.setViewsCount(node.getProperty("exo:viewsCount").getLong());
     }
     if (node.hasNode("illustration")) {
-      Node illustrationContentNode = node.getNode("illustration").getNode("jcr:content");
+      Node illustrationContentNode = node.getNode("illustration").getNode(NodetypeConstant.JCR_CONTENT);
       byte[] bytes = IOUtils.toByteArray(illustrationContentNode.getProperty("jcr:data").getStream());
       news.setIllustration(bytes);
       news.setIllustrationUpdateDate(illustrationContentNode.getProperty("exo:dateModified").getDate().getTime());
@@ -578,11 +584,11 @@ public class JcrNewsStorage implements NewsStorage {
     Node newsNode = session.getNodeByUUID(news.getId());
     if (newsNode != null) {
       String processedBody = imageProcessor.processImages(news.getBody(), newsNode.getUUID(), "images");
-      newsNode.setProperty("exo:title", news.getTitle());
+      newsNode.setProperty(NodetypeConstant.EXO_TITLE, news.getTitle());
       newsNode.setProperty("exo:name", news.getTitle());
-      newsNode.setProperty("exo:summary", news.getSummary());
+      newsNode.setProperty(EXO_SUMMARY_PROP, news.getSummary());
       news.setBody(processedBody);
-      newsNode.setProperty("exo:body", processedBody);
+      newsNode.setProperty(EXO_BODY_PROP, processedBody);
       newsNode.setProperty("exo:dateModified", Calendar.getInstance());
 
       // illustration
@@ -757,19 +763,19 @@ public class JcrNewsStorage implements NewsStorage {
       illustrationNode = newsNode.getNode("illustration");
     } 
     else {
-      illustrationNode = newsNode.addNode("illustration", "nt:file");
+      illustrationNode = newsNode.addNode("illustration", NodetypeConstant.NT_FILE);
     }
-    illustrationNode.setProperty("exo:title", uploadedResource.getFileName());
+    illustrationNode.setProperty(NodetypeConstant.EXO_TITLE, uploadedResource.getFileName());
     Node resourceNode;
     if (illustrationExists) {
-      resourceNode = illustrationNode.getNode("jcr:content");
+      resourceNode = illustrationNode.getNode(NodetypeConstant.JCR_CONTENT);
     } 
     else {
-      resourceNode = illustrationNode.addNode("jcr:content", "nt:resource");
+      resourceNode = illustrationNode.addNode(NodetypeConstant.JCR_CONTENT, NodetypeConstant.NT_RESOURCE);
     }
-    resourceNode.setProperty("jcr:mimeType", uploadedResource.getMimeType());
+    resourceNode.setProperty(NodetypeConstant.JCR_MIME_TYPE, uploadedResource.getMimeType());
     Calendar now = Calendar.getInstance();
-    resourceNode.setProperty("jcr:lastModified", now);
+    resourceNode.setProperty(NodetypeConstant.JCR_LAST_MODIFIED, now);
     resourceNode.setProperty("exo:dateModified", now);
     String fileDiskLocation = uploadedResource.getStoreLocation();
     try (InputStream inputStream = new FileInputStream(fileDiskLocation)) {

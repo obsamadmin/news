@@ -522,27 +522,47 @@ public class NewsServiceImpl implements NewsService {
       ctx.getNotificationExecutor().with(ctx.makeCommand(PluginKey.key(PostNewsNotificationPlugin.ID))).execute(ctx);
       Matcher matcher = MentionInNewsNotificationPlugin.MENTION_PATTERN.matcher(contentBody);
       if(matcher.find()) {
-        sendMentionInNewsNotification(contentAuthor, currentUser, contentTitle, contentBody, contentSpaceId, illustrationURL, authorAvatarUrl, activityLink, contentSpaceName);
+        Map<String, String> mentionNewsNotificationInformations = new HashMap<String, String>();
+        mentionNewsNotificationInformations.put(NotificationConstants.CONTENT_BODY, contentBody);
+        mentionNewsNotificationInformations.put(NotificationConstants.CURRENT_USER, currentUser);
+        mentionNewsNotificationInformations.put(NotificationConstants.CONTENT_AUTHOR, contentAuthor);
+        mentionNewsNotificationInformations.put(NotificationConstants.CONTENT_SPACE_ID, contentSpaceId);
+        mentionNewsNotificationInformations.put(NotificationConstants.CONTENT_TITLE, contentTitle);
+        mentionNewsNotificationInformations.put(NotificationConstants.CONTENT_SPACE, contentSpaceName);
+        mentionNewsNotificationInformations.put(NotificationConstants.ILLUSTRATION_URL, illustrationURL);
+        mentionNewsNotificationInformations.put(NotificationConstants.AUTHOR_AVATAR_URL, authorAvatarUrl);
+        mentionNewsNotificationInformations.put(NotificationConstants.ACTIVITY_LINK, activityLink);
+        sendMentionInNewsNotification(mentionNewsNotificationInformations);
       }
     } else if (context.equals(NotificationConstants.NOTIFICATION_CONTEXT.MENTION_IN_NEWS)) {
-      sendMentionInNewsNotification(contentAuthor, currentUser, contentTitle, contentBody, contentSpaceId, illustrationURL, authorAvatarUrl, activityLink, contentSpaceName);
+      Map<String, String> mentionNewsNotificationInformations = new HashMap<String, String>();
+      mentionNewsNotificationInformations.put(NotificationConstants.CONTENT_BODY, contentBody);
+      mentionNewsNotificationInformations.put(NotificationConstants.CURRENT_USER, currentUser);
+      mentionNewsNotificationInformations.put(NotificationConstants.CONTENT_AUTHOR, contentAuthor);
+      mentionNewsNotificationInformations.put(NotificationConstants.CONTENT_SPACE_ID, contentSpaceId);
+      mentionNewsNotificationInformations.put(NotificationConstants.CONTENT_TITLE, contentTitle);
+      mentionNewsNotificationInformations.put(NotificationConstants.CONTENT_SPACE, contentSpaceName);
+      mentionNewsNotificationInformations.put(NotificationConstants.ILLUSTRATION_URL, illustrationURL);
+      mentionNewsNotificationInformations.put(NotificationConstants.AUTHOR_AVATAR_URL, authorAvatarUrl);
+      mentionNewsNotificationInformations.put(NotificationConstants.ACTIVITY_LINK, activityLink);
+      sendMentionInNewsNotification(mentionNewsNotificationInformations);
     } else if (context.equals(NotificationConstants.NOTIFICATION_CONTEXT.PUBLISH_IN_NEWS)) {
       ctx.getNotificationExecutor().with(ctx.makeCommand(PluginKey.key(PublishNewsNotificationPlugin.ID))).execute(ctx);
     }
   }
   
-  private void sendMentionInNewsNotification(String contentAuthor, String currentUser, String contentTitle, String contentBody, String contentSpaceId, String illustrationURL, String authorAvatarUrl, String activityLink, String contentSpaceName) {
-    Set<String> mentionedIds = NewsUtils.processMentions(contentBody);
+  private void sendMentionInNewsNotification(Map<String, String> mentionNewsNotificationInformations) {
+    Set<String> mentionedIds = NewsUtils.processMentions(mentionNewsNotificationInformations.get(NotificationConstants.CONTENT_BODY));
     NotificationContext mentionNotificationCtx = NotificationContextImpl.cloneInstance()
             .append(MentionInNewsNotificationPlugin.CONTEXT, NotificationConstants.NOTIFICATION_CONTEXT.MENTION_IN_NEWS)
-            .append(PostNewsNotificationPlugin.CURRENT_USER, currentUser)
-            .append(PostNewsNotificationPlugin.CONTENT_AUTHOR, contentAuthor)
-            .append(PostNewsNotificationPlugin.CONTENT_SPACE_ID, contentSpaceId)
-            .append(PostNewsNotificationPlugin.CONTENT_TITLE, contentTitle)
-            .append(PostNewsNotificationPlugin.CONTENT_SPACE, contentSpaceName)
-            .append(PostNewsNotificationPlugin.ILLUSTRATION_URL, illustrationURL)
-            .append(PostNewsNotificationPlugin.AUTHOR_AVATAR_URL, authorAvatarUrl)
-            .append(PostNewsNotificationPlugin.ACTIVITY_LINK, activityLink)
+            .append(PostNewsNotificationPlugin.CURRENT_USER, mentionNewsNotificationInformations.get(NotificationConstants.CURRENT_USER))
+            .append(PostNewsNotificationPlugin.CONTENT_AUTHOR, mentionNewsNotificationInformations.get(NotificationConstants.CONTENT_AUTHOR))
+            .append(PostNewsNotificationPlugin.CONTENT_SPACE_ID, mentionNewsNotificationInformations.get(NotificationConstants.CONTENT_SPACE_ID))
+            .append(PostNewsNotificationPlugin.CONTENT_TITLE, mentionNewsNotificationInformations.get(NotificationConstants.CONTENT_TITLE))
+            .append(PostNewsNotificationPlugin.CONTENT_SPACE, mentionNewsNotificationInformations.get(NotificationConstants.CONTENT_SPACE))
+            .append(PostNewsNotificationPlugin.ILLUSTRATION_URL, mentionNewsNotificationInformations.get(NotificationConstants.ILLUSTRATION_URL))
+            .append(PostNewsNotificationPlugin.AUTHOR_AVATAR_URL, mentionNewsNotificationInformations.get(NotificationConstants.AUTHOR_AVATAR_URL))
+            .append(PostNewsNotificationPlugin.ACTIVITY_LINK, mentionNewsNotificationInformations.get(NotificationConstants.ACTIVITY_LINK))
             .append(MentionInNewsNotificationPlugin.MENTIONED_IDS, mentionedIds);
     mentionNotificationCtx.getNotificationExecutor().with(mentionNotificationCtx.makeCommand(PluginKey.key(MentionInNewsNotificationPlugin.ID))).execute(mentionNotificationCtx);
   }
