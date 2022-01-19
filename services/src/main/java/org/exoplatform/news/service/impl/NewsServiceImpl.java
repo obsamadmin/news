@@ -105,7 +105,7 @@ public class NewsServiceImpl implements NewsService {
       News createdNews;
       if (PublicationDefaultStates.PUBLISHED.equals(news.getPublicationState())) {
         createdNews = postNews(news, currentIdentity.getUserId());
-      } else if(news.getSchedulePostDate() != null){
+      } else if (news.getSchedulePostDate() != null){
         createdNews = unScheduleNews(news, currentIdentity);
       } else {
         createdNews = newsStorage.createNews(news);
@@ -333,14 +333,16 @@ public class NewsServiceImpl implements NewsService {
     if (!canScheduleNews(space, currentIdentity)) {
       throw new IllegalArgumentException("User " + currentIdentity.getUserId() + " is not authorized to schedule news");
     }
-    List<String> oldTargets = newsTargetingService.getTargetsByNewsId(news.getId());
-    if (news.isPublished()) {
-      if (news.getTargets() != null && !oldTargets.equals(news.getTargets())) {
+    if (NewsUtils.canPublishNews(currentIdentity)) {
+      List<String> oldTargets = newsTargetingService.getTargetsByNewsId(news.getId());
+      if (news.isPublished()) {
+        if (news.getTargets() != null && !oldTargets.equals(news.getTargets())) {
+          newsTargetingService.deleteNewsTargets(news.getId(), currentIdentity.getUserId());
+          newsTargetingService.saveNewsTarget(news.getId(), news.getTargets(), currentIdentity.getUserId());
+        }
+      } else {
         newsTargetingService.deleteNewsTargets(news.getId(), currentIdentity.getUserId());
-        newsTargetingService.saveNewsTarget(news.getId(), news.getTargets(), currentIdentity.getUserId());
       }
-    } else {
-      newsTargetingService.deleteNewsTargets(news.getId(), currentIdentity.getUserId());
     }
     return newsStorage.scheduleNews(news);
   }
@@ -396,13 +398,13 @@ public class NewsServiceImpl implements NewsService {
    * {@inheritDoc}
    */
   @Override
-  public void publishNews(News newNews, String publisher) throws Exception {
-    News news = getNewsById(newNews.getId(), false);
+  public void publishNews(News publishedNews, String publisher) throws Exception {
+    News news = getNewsById(publishedNews.getId(), false);
     newsStorage.publishNews(news);
-    List<String> oldTargets = newsTargetingService.getTargetsByNewsId(newNews.getId());
-    if(newNews.getTargets() != null && !oldTargets.equals(newNews.getTargets())) {
-      newsTargetingService.deleteNewsTargets(newNews.getId(), publisher);
-      newsTargetingService.saveNewsTarget(newNews.getId(), newNews.getTargets(), publisher);
+    List<String> oldTargets = newsTargetingService.getTargetsByNewsId(publishedNews.getId());
+    if(publishedNews.getTargets() != null && !oldTargets.equals(publishedNews.getTargets())) {
+      newsTargetingService.deleteNewsTargets(publishedNews.getId(), publisher);
+      newsTargetingService.saveNewsTarget(publishedNews.getId(), publishedNews.getTargets(), publisher);
     }
     NewsUtils.broadcastEvent(NewsUtils.PUBLISH_NEWS, news.getId(), news);
     sendNotification(publisher, news, NotificationConstants.NOTIFICATION_CONTEXT.PUBLISH_IN_NEWS);
